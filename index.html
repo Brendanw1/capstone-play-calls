@@ -622,24 +622,64 @@
                                             }}
                                         >
                                             <div className="flex justify-between items-start mb-2">
-                                                <h3 className={`font-semibold ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{summary.name}</h3>
+                                                <h3 className={`font-semibold ${
+                                                    (selectedPlayType == type || expandedPlayType == type) && !darkMode 
+                                                    ? 'text-gray-800' 
+                                                    : (selectedPlayType == type || expandedPlayType == type) && darkMode
+                                                    ? 'text-black'
+                                                    : darkMode
+                                                    ? 'text-gray-200'
+                                                    : 'text-gray-900'
+                                                }`}>{summary.name}</h3>
                                                 <span className={`text-xs px-2 py-1 rounded ${darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
                                                     {summary.playCount} plays
                                                 </span>
                                             </div>
                                             <div className="space-y-1">
                                                 <div className="flex justify-between">
-                                                    <span className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Times Called:</span>
-                                                    <span className={`text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{summary.totalCalls}</span>
+                                                    <span className={`text-sm ${
+                                                        (selectedPlayType === type || expandedPlayType === type) && !darkMode 
+                                                        ? 'text-gray-600'
+                                                        : (selectedPlayType === type || expandedPlayType === type) && darkMode
+                                                        ? 'text-gray-900'
+                                                        : darkMode
+                                                        ? 'text-gray-400' 
+                                                        : 'text-gray-600'
+                                                    }`}>Times Called:</span>
+                                                    <span className={`text-sm font-medium ${
+                                                        (selectedPlayType === type || expandedPlayType === type) && !darkMode
+                                                        ? 'text-gray-800'
+                                                        : (selectedPlayType === type || expandedPlayType === type) && darkMode
+                                                        ? 'text-black'
+                                                        : darkMode 
+                                                        ? 'text-gray-200' 
+                                                        : 'text-gray-800'
+                                                    }`}>{summary.totalCalls}</span>
                                                 </div>
                                                 <div className="flex justify-between">
-                                                    <span className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Avg Points:</span>
+                                                    <span className={`text-sm ${
+                                                        (selectedPlayType === type || expandedPlayType === type) && !darkMode
+                                                        ? 'text-gray-600'
+                                                        : (selectedPlayType === type || expandedPlayType === type) && darkMode
+                                                        ? 'text-gray-900'
+                                                        : darkMode
+                                                        ? 'text-gray-400' 
+                                                        : 'text-gray-600'
+                                                    }`}>Avg Points:</span>
                                                     <span className={`text-sm font-medium ${summary.avgPoints > 1 ? 'text-green-500' : 'text-blue-500'}`}>
                                                         {summary.avgPoints.toFixed(2)}
                                                     </span>
                                                 </div>
                                                 <div className="flex justify-between">
-                                                    <span className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>FG%:</span>
+                                                    <span className={`text-sm ${
+                                                        (selectedPlayType === type || expandedPlayType === type) && !darkMode
+                                                        ? 'text-gray-600'
+                                                        : (selectedPlayType === type || expandedPlayType === type) && darkMode
+                                                        ? 'text-gray-900'
+                                                        : darkMode
+                                                        ? 'text-gray-400' 
+                                                        : 'text-gray-600'
+                                                    }`}>FG%:</span>
                                                     <span className={`text-sm font-medium ${summary.fgPct > 40 ? 'text-green-500' : 'text-blue-500'}`}>
                                                         {summary.fgPct.toFixed(1)}%
                                                     </span>
