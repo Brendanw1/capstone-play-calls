@@ -484,10 +484,21 @@
 
         const PlayStatsCard = ({ stats }) => {
             if (!stats) return null;
-
-            const avgPoints = parseFloat(stats.avgPointsNoFTs) || 0;
-            const numCalls = parseInt(stats.numCalls || stats.NumCalls) || 0;
-            const fgPct = (parseFloat(stats.madeFG) * 100) || 0;
+            
+            // Need to fix avgPoints
+            const totalPoints = (parseInt(stats['+2']) || 0) * 2 +
+                                (parseInt(stats['+3']) || 0) * 3 +
+                                (parseInt(stats['+2F']) || 0) * 2 +
+                                (parseInt(stats['+3F']) || 0) * 3;
+            const numCalls = parseInt(stats.numCalls || stats.NumCalls) || 1;
+            const avgPoints = numCalls > 0 ? totalPoints / numCalls : 0;
+            
+            // Calculate FG% from raw counts
+            const madeFGCount = (parseInt(stats['+2']) || 0) +
+                               (parseInt(stats['+3']) || 0) +
+                               (parseInt(stats['+2F']) || 0) +
+                               (parseInt(stats['+3F']) || 0);
+            const fgPct = (madeFGCount / numCalls) * 100;
 
             return (
                     <div className={`rounded-lg shadow-lg ${darkMode ? 'bg-gray-800' : 'bg-white'} p-6`}>
