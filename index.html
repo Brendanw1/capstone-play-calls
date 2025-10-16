@@ -565,11 +565,24 @@
                 
                 Object.values(groups).forEach(group => {
                     Object.values(group).forEach(variation => {
-                        if (variation.NumCalls) {
-                            const calls = parseInt(variation.numCalls || variation.NumCalls) || 0;
+                        const calls = parseInt(variation.numCalls || variation.NumCalls) || 0;
+                        if (calls > 0) {
                             totalCalls += calls;
-                            totalPoints += (parseFloat(variation.avgPointsNoFTs) || 0) * calls;
-                            totalMadeFG += (parseFloat(variation.madeFG) || 0) * calls;
+                            
+                            // Calculate total points from raw counts
+                            const totalPointCount = (parseInt(variation['+2']) || 0) * 2 +
+                                                (parseInt(variation['+3']) || 0) * 3 +
+                                                (parseInt(variation['+2F']) || 0) * 2 +
+                                                (parseInt(variation['+3F']) || 0) * 3;
+
+                            totalPoints += totalPointCount;
+
+                            // Calculate made FG from raw counts
+                            const madeFGCount = (parseInt(variation['+2']) || 0) +
+                                               (parseInt(variation['+3']) || 0) +
+                                               (parseInt(variation['+2F']) || 0) +
+                                               (parseInt(variation['+3F']) || 0);
+                            totalMadeFG += madeFGCount;
                             playCount++;
                         }
                     });
