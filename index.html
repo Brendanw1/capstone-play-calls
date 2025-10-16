@@ -304,17 +304,31 @@
                 successRateChartInstance.current.destroy();
             }
 
-            const madeFG = parseFloat(selectedPlayStats.madeFG) || 0;
-            const missTO = parseFloat(selectedPlayStats.missTO) || 0;
-            const nothing = parseFloat(selectedPlayStats.nothing) || 0;
-            const TO = parseFloat(selectedPlayStats.TO) || 0;
+            // Getting raw counts for before calculating percentages
+            const totalCalls = parseInt(selectedPlayStats.NumCalls) || 1;
+            const madeFGCount = (parseInt(selectedPlayStats['+2']) || 0) +
+                               (parseInt(selectedPlayStats['+3']) || 0) +
+                               (parseInt(selectedPlayStats['+2F']) || 0) +
+                               (parseInt(selectedPlayStats['+3F']) || 0);
+            const missTOCount = (parseInt(selectedPlayStats['-2']) || 0) +
+                                (parseInt(selectedPlayStats['-3']) || 0) +
+                                (parseInt(selectedPlayStats['-2F']) || 0) +
+                                (parseInt(selectedPlayStats['-3F']) || 0);
+            const nothingCount = parseInt(selectedPlayStats.NOTHING) || 0;
+            const TOCount = parseInt(selectedPlayStats.TO) || 0;
+
+            // Calculate percentages
+            const madeFG = (madeFGCount / totalCalls) * 100;
+            const missTO = (missTOCount / totalCalls) * 100;
+            const nothing = (nothingCount / totalCalls) * 100;
+            const TO = (TOCount / totalCalls) * 100;
 
             successRateChartInstance.current = new Chart(ctx, {
                 type: 'doughnut',
                 data: {
                     labels: ['Made FG', 'Miss/TO', 'Nothing', 'Turnover'],
                     datasets: [{
-                        data: [madeFG * 100, missTO * 100, nothing * 100, TO * 100],
+                        data: [madeFG, missTO, nothing, TO],
                         backgroundColor: [
                             '#10B981', // Green for made
                             '#EF4444', // Red for miss/TO
