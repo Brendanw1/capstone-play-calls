@@ -620,38 +620,49 @@
                                                         <label className={`block text-xs font-medium mb-1 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
                                                             Play Group
                                                         </label>
-                                                        
-                                                        <select
-                                                            value={logPlayGroup}
-                                                            onChange={(e) => setLogPlayGroup(e.target.value)}
-                                                            className={`w-full px-2 py-1 text-sm border rounded ${darkMode ? 'bg-gray-800 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
-                                                        >
-                                                            <option value="">Select Group</option>
+                                                        <div className="flex flex-wrap gap-2">
                                                             {logAvailableGroups.map(group => (
-                                                                <option key={group} value={group}>{group}</option>
-                                                            ))}
-                                                        </select>
-
+                                                                <button
+                                                                    key={group}
+                                                                    onClick={() => setLogPlayGroup(group)}
+                                                                    className={`px-3 py-1 text-sm rounded font-medium transition-colors ${
+                                                                        logPlayGroup === group 
+                                                                            ? 'bg-blue-600 text-white'
+                                                                            : darkMode
+                                                                            ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                                                                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                                                    }`}
+                                                                    >
+                                                                    {group}
+                                                                    </button>
+                                                                ))}
+                                                            </div>
                                                     </div>
                                                     
-                                                    <div>
-                                                        <label className={`block text-xs font-medium mb-1 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                                                            Variation
-                                                        </label>
-                                                        <select
-                                                            value={logVariation}
-                                                            onChange={(e) => setLogVariation(e.target.value)}
-                                                            disabled={!logPlayGroup}
-                                                            className={`w-full px-2 py-1 text-sm border rounded ${
-                                                                !logPlayGroup ? 'opacity-50 cursor-not-allowed' : ''
-                                                            } ${darkMode ? 'bg-gray-800 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
-                                                        >
-                                                            <option value="">Select Variation</option>
-                                                            {logAvailableVariations.map(variation => (
-                                                                <option key={variation} value={variation}>{`Variation ${variation}`}</option>
-                                                            ))}
-                                                        </select>
-                                                    </div>
+                                                    {logPlayGroup && (
+                                                        <div>
+                                                            <label className={`block text-xs font-medium mb-1 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                                                                Variation
+                                                            </label>
+                                                            <div className="flex flex-wrap gap-2">
+                                                                {logAvailableVariations.map(variation => (
+                                                                    <button
+                                                                        key={variation}
+                                                                        onClick={() => setLogVariation(variation)}
+                                                                        className={`px-3 py-1 text-sm rounded font-medium transition-colors ${
+                                                                            logVariation === variation 
+                                                                                ? 'bg-blue-600 text-white'
+                                                                                : darkMode
+                                                                                ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                                                                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                                                        }`}
+                                                                    >
+                                                                        {variation}
+                                                                    </button>
+                                                                ))}
+                                                            </div>                                                                        
+                                                        </div>
+                                                    )}
                                                     
                                                     {logVariation && (
                                                         <div>
