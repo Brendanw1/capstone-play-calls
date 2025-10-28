@@ -512,7 +512,7 @@
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                             <div>
                                 <div className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Avg Points</div>
-                                <div className={`text-2xl font-bold ${avgPoints > 1 ? 'text-green-500' : avgPoints < 0.5 ? 'text-red-500' : 'text-blue-500'}`}>
+                                <div className={`text-2xl font-bold ${avgPoints > 1.15 ? 'text-green-500' : avgPoints < 0.95 ? 'text-red-500' : 'text-blue-500'}`}>
                                     {avgPoints.toFixed(2)}
                                 </div>
                             </div>
@@ -522,7 +522,7 @@
                             </div>
                             <div>
                                 <div className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>FG %</div>
-                                <div className={`text-2xl font-bold ${fgPct > 40 ? 'text-green-500' : fgPct < 30 ? 'text-red-500' : 'text-blue-500'}`}>
+                                <div className={`text-2xl font-bold ${fgPct > 43 ? 'text-green-500' : fgPct < 37 ? 'text-red-500' : 'text-blue-500'}`}>
                                     {fgPct.toFixed(1)}%
                                 </div>
                             </div>
@@ -669,7 +669,7 @@
                                                         ? 'text-gray-400' 
                                                         : 'text-gray-600'
                                                     }`}>Avg Points:</span>
-                                                    <span className={`text-sm font-medium ${summary.avgPoints > 1 ? 'text-green-500' : 'text-blue-500'}`}>
+                                                    <span className={`text-sm font-medium ${summary.avgPoints > 1.15 ? 'text-green-500' : summary.avgPoints < 0.95 ? 'text-red-500' : 'text-blue-500'}`}>
                                                         {summary.avgPoints.toFixed(2)}
                                                     </span>
                                                 </div>
@@ -683,7 +683,7 @@
                                                         ? 'text-gray-400' 
                                                         : 'text-gray-600'
                                                     }`}>FG%:</span>
-                                                    <span className={`text-sm font-medium ${summary.fgPct > 40 ? 'text-green-500' : 'text-blue-500'}`}>
+                                                    <span className={`text-sm font-medium ${summary.fgPct > 43 ? 'text-green-500' : summary.fgPct < 37 ? 'text-red-500' : 'text-blue-500'}`}>
                                                         {summary.fgPct.toFixed(1)}%
                                                     </span>
                                                 </div>
@@ -770,24 +770,6 @@
                                                                     2pt Made
                                                                 </button>
                                                                 <button
-                                                                    onClick={() => logPlayOutcome('+3F')}
-                                                                    disabled={logging}
-                                                                    className={`px-3 py-2 text-sm rounded font-medium transition-colors ${
-                                                                        logging ? 'opacity-50 cursor-not-allowed' : ''
-                                                                    } bg-blue-600 text-white hover:bg-blue-700`}
-                                                                >
-                                                                    3pt + Foul
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => logPlayOutcome('+2F')}
-                                                                    disabled={logging}
-                                                                    className={`px-3 py-2 text-sm rounded font-medium transition-colors ${
-                                                                        logging ? 'opacity-50 cursor-not-allowed' : ''
-                                                                    } bg-blue-500 text-white hover:bg-blue-600`}
-                                                                >
-                                                                    2pt + Foul
-                                                                </button>
-                                                                <button
                                                                     onClick={() => logPlayOutcome('-3')}
                                                                     disabled={logging}
                                                                     className={`px-3 py-2 text-sm rounded font-medium transition-colors ${
@@ -806,11 +788,29 @@
                                                                     2pt Miss
                                                                 </button>
                                                                 <button
+                                                                    onClick={() => logPlayOutcome('+3F')}
+                                                                    disabled={logging}
+                                                                    className={`px-3 py-2 text-sm rounded font-medium transition-colors ${
+                                                                        logging ? 'opacity-50 cursor-not-allowed' : ''
+                                                                    } bg-green-600 text-white hover:bg-green-700`}
+                                                                >
+                                                                    3pt + Foul
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => logPlayOutcome('+2F')}
+                                                                    disabled={logging}
+                                                                    className={`px-3 py-2 text-sm rounded font-medium transition-colors ${
+                                                                        logging ? 'opacity-50 cursor-not-allowed' : ''
+                                                                    } bg-green-500 text-white hover:bg-green-600`}
+                                                                >
+                                                                    2pt + Foul
+                                                                </button>
+                                                                <button
                                                                     onClick={() => logPlayOutcome('-3F')}
                                                                     disabled={logging}
                                                                     className={`px-3 py-2 text-sm rounded font-medium transition-colors ${
                                                                         logging ? 'opacity-50 cursor-not-allowed' : ''
-                                                                    } bg-orange-600 text-white hover:bg-orange-700`}
+                                                                    } bg-red-600 text-white hover:bg-red-700`}
                                                                 >
                                                                     3pt Miss + Foul
                                                                 </button>
@@ -819,7 +819,7 @@
                                                                     disabled={logging}
                                                                     className={`px-3 py-2 text-sm rounded font-medium transition-colors ${
                                                                         logging ? 'opacity-50 cursor-not-allowed' : ''
-                                                                    } bg-orange-500 text-white hover:bg-orange-600`}
+                                                                    } bg-red-500 text-white hover:bg-red-600`}
                                                                 >
                                                                     2pt Miss + Foul
                                                                 </button>
