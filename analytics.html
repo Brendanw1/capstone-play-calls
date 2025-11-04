@@ -1,1 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>VT Men's Basketball — Sideline Analytics</title>
 
+  <!-- React + Babel -->
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- Tailwind + Chart.js -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- Firebase (compat) -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+
+  <style>
+    html,body{height:100%;margin:0}
+    .dark-mode{background:#111827 !important;color:#f9fafb}
+    .light-mode{background:#f9fafb !important;color:#111827}
+    .selectlike{appearance:none;background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%);background-position:calc(100% - 18px) calc(50% - 3px),calc(100% - 12px) calc(50% - 3px);background-size:6px 6px,6px 6px;background-repeat:no-repeat}
+    .suggestion{cursor:pointer}
+    .tbl th{font-weight:700}
+    .tbl th,.tbl td{padding:.6rem .75rem;white-space:nowrap}
+    .pill{padding:.4rem .6rem;border-radius:.5rem}
+  </style>
+</head>
+<body class="dark-mode">
+  <div id="root"></div>
+
+  <script>
+    // Firebase
+    const firebaseConfig = {
+      apiKey: "AIzaSyDmUDcy18ZWk_EgOSlLsk9CgzQaKVxcfG4",
+      authDomain: "vtmbb-playcalls.firebaseapp.com",
+      databaseURL: "https://vtmbb-playcalls-default-rtdb.firebaseio.com",
+      projectId: "vtmbb-playcalls",
+      storageBucket: "vtmbb-playcalls.firebasestorage.app",
+      messagingSenderId: "329877987847",
+      appId: "1:329877987847:web:d4d33227dc39624ae100a2",
+    };
+    firebase.initializeApp(firebaseConfig);
+    const database = firebase.database();
+  </script>
+
+  <script type="text/babel">
+    const {useState,useEffect,useMemo,useRef,useCallback} = React;
+
+    const letters="ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    const L=(i)=>letters[i]||`X${i+1}`;
+    const N2=(i)=>(i+1).toString().padStart(2,'0');
+
+    function App(){
+      const [dark,setDark]=useState(true);
+      useEffect(()=>{document.body.className=dark?'dark-mode':'light-mode';},[dark]);
+
+      const [season,setSeason]=useState('2024');
+      const [playData,setPlayData]=useState(null);
+      const [loading,setLoading]=useState(true);
+      const [updated,setUpdated]=useState(null);
+
+      // Single search box + selected play
+      const [query,setQuery]=useState('');
+      const [selected,setSelected]=useState(null); // {type, group, v, label}
+
+      // charts
+      const donutRef=useRef(null), donutInst=useRef(null);
+      const barRef=useRef(null), barInst=useRef(null);
+
+      const load=useCallback(async()=>{
+        setLoading(true);
+        setSelected(null);
+        const snap=await database.ref(`playcalls/${season}`).once('value');
+        setPlayData(snap.exists()?snap.val():null);
+        setUpdated(new Date().toLocaleString());
+        setLoading(false);
+      },[season]);
+      useEffect(()=>{load();},[load]);
+
+      // Types present
+      const typeKeys=useMemo(()=> playData?Object.keys(playData).sort():[],[playData]);
+
+      // Index every play across all types, for fast search/ranks
+      const indexAll=useMemo(()=>{
+        if(!playData) return [];
+        const rows=[];
+        typeKeys.forEach((t,ti)=>{
+          const groups=Object.keys(playData[t]||{}).sort();
+          groups.forEach((g,gi)=>{
+            const groupObj=playData[t][g]||{};
+            Object.keys(groupObj).forEach(v=>{
+              if(!(v.length===1 && /[A-Z]/i.test(v))) return;
+              const s=groupObj[v]||{};
+              const n=parseInt(s.numCalls||s.NumCalls)||0;
+              if(n<=0) return;
+              const pts=(+s['+2']||0)*2+(+s['+3']||0)*3+(+s['+2F']||0)*2+(+s['+3F']||0)*3;
+              const ppp=n?pts/n:0;
+              const label=`T${ti+1}-${N2(gi)}${v}`;   // e.g., T1-05A
+              rows.push({label,n,ppp,type:t,group:g,v});
+            });
+          });
+        });
+        return rows;
+      },[playData,typeKeys]);
+
+      // Infer "current type" from the query or selected play (so rankings stay in-type)
+      const inferredTypeKey=useMemo(()=>{
+        if(selected?.type) return selected.type;
+        const m=query.match(/T(\d+)/i);
+        if(m){
+          const idx=parseInt(m[1],10)-1;
+          if(idx>=0 && idx<typeKeys.length) return typeKeys[idx];
+        }
+        return null; // show global if unknown
+      },[query,selected,typeKeys]);
+
+      // Suggestions as user types: rank by N (frequency)
+      const suggestions=useMemo(()=>{
+        const q=query.trim().toLowerCase();
+        const pool=inferredTypeKey
+          ? indexAll.filter(p=>p.type===inferredTypeKey)
+          : indexAll;
+        const filtered=q?pool.filter(p=>p.label.toLowerCase().includes(q)):pool;
+        return [...filtered].sort((a,b)=> b.n-a.n || a.label.localeCompare(b.label)).slice(0,8);
+      },[query,indexAll,inferredTypeKey]);
+
+      // Top/Bottom 5 PPP, filtered to inferred type if available
+      const ranks=useMemo(()=>{
+        const pool=inferredTypeKey
+          ? indexAll.filter(p=>p.type===inferredTypeKey)
+          : indexAll;
+        const top=[...pool].sort((a,b)=> b.ppp-a.ppp).slice(0,5);
+        const bottom=[...pool].sort((a,b)=> a.ppp-b.ppp).slice(0,5);
+        return {top,bottom};
+      },[indexAll,inferredTypeKey]);
+
+      // Stats for selected play -> detail + charts
+      const stats=useMemo(()=>{
+        if(!selected || !playData) return null;
+        return playData[selected.type]?.[selected.group]?.[selected.v] || null;
+      },[selected,playData]);
+
+      // Header numbers
+      const header=useMemo(()=>{
+        if(!stats) return null;
+        const n=parseInt(stats.numCalls||stats.NumCalls)||1;
+        const pts=(+stats['+2']||0)*2+(+stats['+3']||0)*3+(+stats['+2F']||0)*2+(+stats['+3F']||0)*3;
+        const ppp=n?pts/n:0;
+        const made=['+2','+3','+2F','+3F'].reduce((s,k)=>s+(+stats[k]||0),0);
+        const fg=n?(made/n)*100:0;
+        return {n,ppp,fg,fof:stats.FOF||0};
+      },[stats]);
+
+      // Charts
+      useEffect(()=>{
+        if(!stats || !donutRef.current) return;
+        if(donutInst.current) donutInst.current.destroy();
+        const total=parseInt(stats.NumCalls)||1;
+        const made=['+2','+3','+2F','+3F'].reduce((s,k)=>s+(+stats[k]||0),0);
+        const missTo=['-2','-3','-2F','-3F'].reduce((s,k)=>s+(+stats[k]||0),0);
+        const nothing=+stats.NOTHING||0;
+        const to=+stats.TO||0;
+        donutInst.current=new Chart(donutRef.current.getContext('2d'),{
+          type:'doughnut',
+          data:{labels:['Made FG','Miss/TO','Nothing','Turnover'],
+                datasets:[{data:[made,missTo,nothing,to].map(x=>x/total*100),
+                           backgroundColor:['#10B981','#EF4444','#6B7280','#F59E0B']}]},
+          options:{responsive:true,maintainAspectRatio:false,
+            plugins:{legend:{position:'bottom',labels:{color:dark?'#fff':'#374151',padding:12}},
+                     tooltip:{callbacks:{label:(c)=>`${c.label}: ${c.parsed.toFixed(1)}%`}}}}
+        });
+      },[stats,dark]);
+
+      useEffect(()=>{
+        if(!stats || !barRef.current) return;
+        if(barInst.current) barInst.current.destroy();
+        const vals=[
+          +stats['+3']||0,
+          +stats['+2']||0,
+          (+stats['-2']||0)+(+stats['-3']||0),
+          +stats['+3F']||0,
+          +stats['+2F']||0,
+          (+stats['-2F']||0)+(+stats['-3F']||0)
+        ];
+        barInst.current=new Chart(barRef.current.getContext('2d'),{
+          type:'bar',
+          data:{labels:['3pt','2pt','No Score','3pt+Foul','2pt+Foul','Miss+Foul'],
+                datasets:[{label:'Occurrences',data:vals,backgroundColor:'#3B82F6'}]},
+          options:{responsive:true,maintainAspectRatio:false,
+            scales:{y:{beginAtZero:true,ticks:{color:dark?'#9CA3AF':'#6B7280'},grid:{color:dark?'#374151':'#E5E7EB'}},
+                    x:{ticks:{color:dark?'#9CA3AF':'#6B7280'},grid:{color:dark?'#374151':'#E5E7EB'}}},
+            plugins:{legend:{display:false}}}
+        });
+      },[stats,dark]);
+
+      return (
+        <div className="max-w-7xl mx-auto p-4">
+          {/* Header */}
+          <div className={`rounded-lg shadow p-4 mb-6 ${dark?'bg-gray-800':'bg-white'}`}>
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/6/60/Virginia_Tech_Hokies_logo.svg/2560px-Virginia_Tech_Hokies_logo.svg.png" alt="VT" className="h-12"/>
+                <h1 className="text-2xl font-bold">Sideline Analytics</h1>
+              </div>
+              <div className="flex gap-2">
+                <select value={season} onChange={(e)=>setSeason(e.target.value)}
+                        className={`selectlike px-3 py-2 rounded border ${dark?'bg-gray-700 border-gray-600 text-white':'bg-white border-gray-300'}`}>
+                  <option value="2024">Season 2024</option>
+                  <option value="2025">Season 2025</option>
+                </select>
+                <button onClick={load}
+                        className={`px-3 py-2 rounded ${dark?'bg-blue-600 text-white hover:bg-blue-700':'bg-blue-500 text-white hover:bg-blue-600'}`}>Refresh</button>
+                <button onClick={()=>setDark(d=>!d)}
+                        className={`px-3 py-2 rounded ${dark?'bg-gray-700 text-white hover:bg-gray-600':'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>{dark?'☀️ Light':'🌙 Dark'}</button>
+              </div>
+            </div>
+            {updated && <div className="text-xs opacity-70 mt-2">Loaded: {updated}</div>}
+          </div>
+
+          {/* Loading */}
+          {loading && (
+            <div className="animate-pulse space-y-4">
+              <div className="h-16 bg-gray-300 rounded"></div>
+              <div className="h-64 bg-gray-300 rounded"></div>
+              <div className="h-96 bg-gray-300 rounded"></div>
+            </div>
+          )}
+
+          {!loading && (
+            <>
+              {/* Search only (no play-type bar). Suggestions ranked by N. */}
+              <div className={`rounded-lg shadow p-4 mb-4 ${dark?'bg-gray-800':'bg-white'}`}>
+                <label className="text-sm block mb-1">Search playcall (e.g., <span className="opacity-80">T1-05A</span>)</label>
+                <input
+                  type="text"
+                  value={query}
+                  onChange={(e)=>{ setQuery(e.target.value); /* do not clear selected so charts can stay */ }}
+                  placeholder="Start typing…"
+                  className={`w-full px-3 py-2 rounded border ${dark?'bg-gray-700 border-gray-600 text-white placeholder-gray-400':'bg-white border-gray-300'}`}
+                />
+                {/* suggestions */}
+                <div className={`mt-2 rounded-lg border ${dark?'border-gray-700':'border-gray-300'}`}>
+                  {suggestions.length===0 && (
+                    <div className={`px-3 py-2 text-sm ${dark?'text-gray-300':'text-gray-600'}`}>No matches.</div>
+                  )}
+                  {suggestions.map((s,idx)=>(
+                    <div key={idx}
+                      className={`suggestion px-3 py-2 flex items-center justify-between ${dark?'hover:bg-gray-800':'hover:bg-gray-100'}`}
+                      onClick={()=>{ setSelected(s); setQuery(s.label); }}>
+                      <div className="font-medium">{s.label}</div>
+                      <div className="text-xs opacity-75">N={s.n} • {s.ppp.toFixed(2)} ppp</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Dynamic Top/Bottom 5 PPP — auto-filtered by inferred type from the current query/selection */}
+              <div className="grid lg:grid-cols-2 gap-4 mb-6">
+                <div className={`rounded-lg shadow p-4 ${dark?'bg-gray-800':'bg-white'}`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <h2 className="text-lg font-bold">Top 5 by Points/Play</h2>
+                    <span className="text-xs opacity-70">{inferredTypeKey ? `Type ${L(Math.max(typeKeys.indexOf(inferredTypeKey),0))}` : 'All Types'}</span>
+                  </div>
+                  <table className="tbl w-full">
+                    <thead className={`${dark?'bg-gray-900 text-gray-200':'bg-gray-100 text-gray-700'}`}>
+                      <tr><th className="text-left">Play</th><th className="text-right">N</th><th className="text-right">Pts/Play</th></tr>
+                    </thead>
+                    <tbody>
+                      {ranks.top.length===0 && (<tr><td colSpan="3" className="py-3 text-sm opacity-70">No plays.</td></tr>)}
+                      {ranks.top.map((r,i)=>(
+                        <tr key={`t-${i}`} className={`${dark?'hover:bg-gray-800':'hover:bg-gray-100'} cursor-pointer`}
+                            onClick={()=>{ setSelected(r); setQuery(r.label); }}>
+                          <td className="font-medium">{r.label}</td>
+                          <td className="text-right">{r.n}</td>
+                          <td className="text-right font-semibold text-green-400">{r.ppp.toFixed(2)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className={`rounded-lg shadow p-4 ${dark?'bg-gray-800':'bg-white'}`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <h2 className="text-lg font-bold">Bottom 5 by Points/Play</h2>
+                    <span className="text-xs opacity-70">{inferredTypeKey ? `Type ${L(Math.max(typeKeys.indexOf(inferredTypeKey),0))}` : 'All Types'}</span>
+                  </div>
+                  <table className="tbl w-full">
+                    <thead className={`${dark?'bg-gray-900 text-gray-200':'bg-gray-100 text-gray-700'}`}>
+                      <tr><th className="text-left">Play</th><th className="text-right">N</th><th className="text-right">Pts/Play</th></tr>
+                    </thead>
+                    <tbody>
+                      {ranks.bottom.length===0 && (<tr><td colSpan="3" className="py-3 text-sm opacity-70">No plays.</td></tr>)}
+                      {ranks.bottom.map((r,i)=>(
+                        <tr key={`b-${i}`} className={`${dark?'hover:bg-gray-800':'hover:bg-gray-100'} cursor-pointer`}
+                            onClick={()=>{ setSelected(r); setQuery(r.label); }}>
+                          <td className="font-medium">{r.label}</td>
+                          <td className="text-right">{r.n}</td>
+                          <td className="text-right font-semibold text-red-400">{r.ppp.toFixed(2)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Detail + charts for the currently selected play */}
+              {selected && stats && header && (
+                <div className={`rounded-lg shadow p-6 ${dark?'bg-gray-800':'bg-white'}`}>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-bold">{selected.label}</h3>
+                    <button className={`pill ${dark?'bg-gray-700':'bg-gray-200'}`} onClick={()=>setSelected(null)}>Clear</button>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                    <div>
+                      <div className="text-sm opacity-75">Avg Points</div>
+                      <div className={`text-2xl font-bold ${header.ppp>1?'text-green-500':header.ppp<0.5?'text-red-500':'text-blue-500'}`}>{header.ppp.toFixed(2)}</div>
+                    </div>
+                    <div>
+                      <div className="text-sm opacity-75">Times Called</div>
+                      <div className="text-2xl font-bold">{header.n}</div>
+                    </div>
+                    <div>
+                      <div className="text-sm opacity-75">FG %</div>
+                      <div className={`text-2xl font-bold ${header.fg>40?'text-green-500':header.fg<30?'text-red-500':'text-blue-500'}`}>{header.fg.toFixed(1)}%</div>
+                    </div>
+                    <div>
+                      <div className="text-sm opacity-75">Fouls on FGs</div>
+                      <div className="text-2xl font-bold">{header.fof}</div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <div className="text-sm font-semibold mb-2">Outcome Distribution</div>
+                      <div style={{height:'260px'}}><canvas ref={donutRef}></canvas></div>
+                    </div>
+                    <div>
+                      <div className="text-sm font-semibold mb-2">Scoring Breakdown</div>
+                      <div style={{height:'260px'}}><canvas ref={barRef}></canvas></div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      );
+    }
+
+    ReactDOM.render(<App/>, document.getElementById('root'));
+  </script>
+</body>
+</html>
