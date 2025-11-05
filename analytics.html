@@ -58,7 +58,7 @@
       const [dark,setDark]=useState(true);
       useEffect(()=>{document.body.className=dark?'dark-mode':'light-mode';},[dark]);
 
-      const [season,setSeason]=useState('2024');
+      const [season,setSeason]=useState('2025');
       const [playData,setPlayData]=useState(null);
       const [loading,setLoading]=useState(true);
       const [updated,setUpdated]=useState(null);
@@ -71,7 +71,7 @@
       const donutRef=useRef(null), donutInst=useRef(null);
       const barRef=useRef(null), barInst=useRef(null);
 
-      const load=useCallback(async()=>{
+      const load=useCallback(()=>{
         setLoading(true);
         setSelected(null);
 
