@@ -74,12 +74,25 @@
       const load=useCallback(async()=>{
         setLoading(true);
         setSelected(null);
-        const snap=await database.ref(`playcalls/${season}`).once('value');
-        setPlayData(snap.exists()?snap.val():null);
-        setUpdated(new Date().toLocaleString());
-        setLoading(false);
+
+        const dbRef= database.ref(`playcalls/${season}/stats/series`);
+        // Updated to update in realtime
+        const listener = dbRef.on('value', (snap) => {
+          setPlayData(snap.exists() ? snap.val() : null);
+          setUpdated(new Date().toLocaleString());
+          setLoading(false);
+        }, (error) => {
+          console.error("Error: ", error);
+          setLoading(false);
+        });
+
+        return () => {dbRef.off('value', listener);};
       },[season]);
-      useEffect(()=>{load();},[load]);
+
+      useEffect(()=>{
+        const cleanup=load();
+        return cleanup;
+      },[load]);
 
       // Types present
       const typeKeys=useMemo(()=> playData?Object.keys(playData).sort():[],[playData]);
@@ -88,19 +101,26 @@
       const indexAll=useMemo(()=>{
         if(!playData) return [];
         const rows=[];
-        typeKeys.forEach((t,ti)=>{
-          const groups=Object.keys(playData[t]||{}).sort();
-          groups.forEach((g,gi)=>{
-            const groupObj=playData[t][g]||{};
-            Object.keys(groupObj).forEach(v=>{
-              if(!(v.length===1 && /[A-Z]/i.test(v))) return;
-              const s=groupObj[v]||{};
-              const n=parseInt(s.numCalls||s.NumCalls)||0;
-              if(n<=0) return;
-              const pts=(+s['+2']||0)*2+(+s['+3']||0)*3+(+s['+2F']||0)*2+(+s['+3F']||0)*3;
-              const ppp=n?pts/n:0;
-              const label=`T${ti+1}-${N2(gi)}${v}`;   // e.g., T1-05A
-              rows.push({label,n,ppp,type:t,group:g,v});
+
+        // Changed through series/plays instead of types/groups
+        typeKeys.forEach((seriesName)=>{
+          const playsInSeries=playData[seriesName]||{};
+          Object.keys(playsInSeries).forEach(playNumber=>{
+            const s=playsInSeries[playNumber]||{};
+            const n=parseInt(s.numCalls||s.NumCalls)||0;
+            if(n<=0) return;
+            
+            const pts=(+s['+2']||0)*2+(+s['+3']||0)*3+(+s['+2F']||0)*2+(+s['+3F']||0)*3;
+            const ppp=n?pts/n:0;
+            const label=`${seriesName} ${playNumber}`;   // e.g., "Alpha 1"
+            
+            rows.push({
+              label,
+              n,
+              ppp,
+              series: seriesName,     
+              playNumber: playNumber, 
+              type: seriesName
             });
           });
         });
@@ -109,14 +129,16 @@
 
       // Infer "current type" from the query or selected play (so rankings stay in-type)
       const inferredTypeKey=useMemo(()=>{
-        if(selected?.type) return selected.type;
-        const m=query.match(/T(\d+)/i);
+        
+
+        // Updated to match series names
+        const m=query.match(/\b(alpha|bravo|charlie|delta|echo|foxtrot|golf|hotel|india|juliet|kilo|lima|mike|november|oscar)\b/i);
         if(m){
-          const idx=parseInt(m[1],10)-1;
-          if(idx>=0 && idx<typeKeys.length) return typeKeys[idx];
+          const seriesName=m[1].charAt(0).toUpperCase() + m[1].slice(1).toLowerCase();
+          if(typeKeys.includes(seriesName)) return seriesName;
         }
         return null; // show global if unknown
-      },[query,selected,typeKeys]);
+      },[query,typeKeys]);
 
       // Suggestions as user types: rank by N (frequency)
       const suggestions=useMemo(()=>{
@@ -141,7 +163,8 @@
       // Stats for selected play -> detail + charts
       const stats=useMemo(()=>{
         if(!selected || !playData) return null;
-        return playData[selected.type]?.[selected.group]?.[selected.v] || null;
+        // Changed access by series/playnumber instead of type/group/v
+        return playData[selected.series]?.[selected.playNumber] || null;
       },[selected,playData]);
 
       // Header numbers
@@ -212,13 +235,21 @@
                   <option value="2024">Season 2024</option>
                   <option value="2025">Season 2025</option>
                 </select>
-                <button onClick={load}
-                        className={`px-3 py-2 rounded ${dark?'bg-blue-600 text-white hover:bg-blue-700':'bg-blue-500 text-white hover:bg-blue-600'}`}>Refresh</button>
+                <button onClick={()=>setUpdated(new Date().toLocaleString())}
+                        className={`px-3 py-2 rounded flex items-center gap-2 ${dark?'bg-green-600 text-white hover:bg-green-700':'bg-green-500 text-white hover:bg-green-600'}`}>
+                        <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
+                        Live
+                        </button>
                 <button onClick={()=>setDark(d=>!d)}
                         className={`px-3 py-2 rounded ${dark?'bg-gray-700 text-white hover:bg-gray-600':'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>{dark?'☀️ Light':'🌙 Dark'}</button>
               </div>
             </div>
-            {updated && <div className="text-xs opacity-70 mt-2">Loaded: {updated}</div>}
+            {updated && (
+              <div className="flex items-center gap-2 mt-2">
+                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                <div className="text-xs opacity-70">Live • {updated}</div>
+              </div>
+            )}
           </div>
 
           {/* Loading */}
@@ -234,7 +265,7 @@
             <>
               {/* Search only (no play-type bar). Suggestions ranked by N. */}
               <div className={`rounded-lg shadow p-4 mb-4 ${dark?'bg-gray-800':'bg-white'}`}>
-                <label className="text-sm block mb-1">Search playcall (e.g., <span className="opacity-80">T1-05A</span>)</label>
+                <label className="text-sm block mb-1">Search playcall (e.g., <span className="opacity-80">Alpha 1</span>)</label>
                 <input
                   type="text"
                   value={query}
@@ -263,7 +294,7 @@
                 <div className={`rounded-lg shadow p-4 ${dark?'bg-gray-800':'bg-white'}`}>
                   <div className="flex items-center justify-between mb-2">
                     <h2 className="text-lg font-bold">Top 5 by Points/Play</h2>
-                    <span className="text-xs opacity-70">{inferredTypeKey ? `Type ${L(Math.max(typeKeys.indexOf(inferredTypeKey),0))}` : 'All Types'}</span>
+                    <span className="text-xs opacity-70">{inferredTypeKey ? inferredTypeKey : 'All Series'}</span>
                   </div>
                   <table className="tbl w-full">
                     <thead className={`${dark?'bg-gray-900 text-gray-200':'bg-gray-100 text-gray-700'}`}>
@@ -286,7 +317,7 @@
                 <div className={`rounded-lg shadow p-4 ${dark?'bg-gray-800':'bg-white'}`}>
                   <div className="flex items-center justify-between mb-2">
                     <h2 className="text-lg font-bold">Bottom 5 by Points/Play</h2>
-                    <span className="text-xs opacity-70">{inferredTypeKey ? `Type ${L(Math.max(typeKeys.indexOf(inferredTypeKey),0))}` : 'All Types'}</span>
+                    <span className="text-xs opacity-70">{inferredTypeKey ? inferredTypeKey : 'All Series'}</span>
                   </div>
                   <table className="tbl w-full">
                     <thead className={`${dark?'bg-gray-900 text-gray-200':'bg-gray-100 text-gray-700'}`}>
