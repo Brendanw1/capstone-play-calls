@@ -55,6 +55,23 @@
             animation: slide-down 0.5s ease-out forwards;
         }
 
+        /* Added options to optimize iPad functionality */
+        @media (min-width: 768px) and (max-width: 1024px) {
+            button {
+                min-height: 64px;
+                font-size: 1.125rem;
+                padding: 1.5rem 1rem;
+            }
+        }
+
+        /* Larger for desktop */
+        @media (min-width: 1025px) {
+            button {
+                min-height: 72px;
+                font-size: 1.2rem;
+            }
+        }
+
     </style>
 </head>
 <body class="dark-mode">
@@ -140,6 +157,7 @@
                                     }`}
                                 >
                                     <div className="font-medium">{play.fullName}</div>
+                                    {/*
                                     <div className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
                                         {play.displayName} • {parseInt(play.data.NumCalls) || 0} calls • 
                                         <span className={`font-semibold ${
@@ -161,6 +179,7 @@
                                             (parseInt(play.data.NumCalls) || 1) * 100).toFixed(1)}% FG
                                         </span>
                                     </div>
+                                */}
                                 </button>
                             ))}
                         </div>
@@ -192,15 +211,100 @@
             );
         };
 
+        const GAME_SCHEDULE_2025 = [
+            {
+                id: 'game-001',
+                date: '2025-11-04',
+                opponent: 'vs Charleston Southern',
+                location: 'Home',
+                time: '7:00 PM',
+                displayName: '11/04 vs Charleston Southern'
+            },
+            {
+                id: 'game-002',
+                date: '2025-11-05',
+                opponent: 'vs UNC',
+                location: 'Home',
+                time: '8:00 PM',
+                displayName: '11/05 vs UNC (Home) - 8:00 PM'
+            },
+            {
+                id: 'practice',
+                date: 'practice',
+                opponent: 'Practice',
+                location: 'Home',
+                time: '',
+                displayName: '🏋️ Practice (No Game)'
+            }
+        ];
+
+        const GameInfoHeader = ({ selectedGame, darkMode }) => {
+            if (!selectedGame) {
+                return (
+                    <div className={`p-2 rounded-lg mb-4 text-center ${
+                        darkMode ? 'bg-red-900/20 border border-red-700' : 'bg-red-50 border border-red-200'
+                    }`}>
+                        <span className={`text-sm font-medium ${darkMode ? 'text-red-400' : 'text-red-600'}`}>
+                             No game selected - Please select a game above
+                        </span>
+                    </div>
+                );
+            }
+
+            if (selectedGame.date === 'practice') {
+                return (
+                    <div className={`p-2 rounded-lg mb-4 ${
+                        darkMode ? 'bg-yellow-900/20 border border-yellow-700' : 'bg-yellow-50 border border-yellow-200'
+                    }`}>
+                        <div className="flex items-center justify-center gap-2">
+                            <span className="text-lg">🏋️</span>
+                            <span className={`text-sm font-medium ${darkMode ? 'text-yellow-400' : 'text-yellow-700'}`}>
+                                Practice Mode - Stats only (no possession logging)
+                            </span>
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className={`p-2 rounded-lg mb-4 ${
+                    darkMode ? 'bg-blue-900/20 border border-blue-700' : 'bg-blue-50 border border-blue-200'
+                }`}>
+                    <div className="flex items-center justify-center gap-4 text-sm">
+                        <span className={`font-semibold ${darkMode ? 'text-blue-400' : 'text-blue-700'}`}>
+                             {selectedGame.date}
+                        </span>
+                        <span className={`font-bold ${darkMode ? 'text-blue-300' : 'text-blue-800'}`}>
+                            {selectedGame.opponent}
+                        </span>
+                        <span className={`${darkMode ? 'text-blue-400' : 'text-blue-600'}`}>
+                            {selectedGame.location}
+                        </span>
+                        {selectedGame.time && (
+                            <span className={`${darkMode ? 'text-blue-400' : 'text-blue-600'}`}>
+                                {selectedGame.time}
+                            </span>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
         const PlayCallingDashboard = () => {
             const [darkMode, setDarkMode] = useState(false);
-            const [selectedYear, setSelectedYear] = useState('2024'); // For Viewing data
-            const [loggingYear, setLoggingYear] = useState('2025'); // For logging data
-            const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+            const [selectedYear, setSelectedYear] = useState('2025'); // For Viewing data
             const [loading, setLoading] = useState(true);
             const [lastUpdated, setLastUpdated] = useState(null);
             const [playData, setPlayData] = useState(null);
             const [availableYears, setAvailableYears] = useState([]);
+            const [possessionCount, setPossessionCount] = useState(1);
+            // New State Variables
+            const [currentPeriod, setCurrentPeriod] = useState('1st Half');
+            const [gameSchedule, setGameSchedule] = useState([]);
+            const [selectedGame, setSelectedGame] = useState(null);
+            
+            
+
 
             // Play Selections Stats
             const [selectedPlayType, setSelectedPlayType] = useState('');
@@ -281,24 +385,20 @@
             const getAllPlays = useCallback(() => {
                 if (!playData) return [];
                 const plays = [];
-                Object.entries(playData).forEach(([typeId, playType]) => {
-                    Object.entries(playType).forEach(([groupId, group]) => {
-                        Object.entries(group).forEach(([varId, variation]) => {
-                            if (varId.length === 1 && varId.match(/[A-Z]/i)) {
-                                plays.push({
-                                    id: `${typeId}${groupId}${varId}`,
-                                    typeId,
-                                    groupId,
-                                    varId,
-                                    typeName: playTypeNames[typeId] || `Type ${typeId}`,
-                                    fullName: `${playTypeNames[typeId]} ${typeId}${groupId}${varId}`,
-                                    displayName: `${groupId}${varId}`,
-                                    data: variation 
-                                });
-                            }
+
+                Object.entries(playData).forEach(([seriesName, playsInSeries]) => {
+                    Object.entries(playsInSeries).forEach(([playName, playData]) => {
+                        plays.push({
+                            id: `${seriesName}-${playName}`,
+                            series: seriesName,
+                            playName: playName,
+                            fullName: `${seriesName} ${playName}`,
+                            displayName: `${seriesName} ${playName}`,
+                            data: playData
                         });
                     });
                 });
+
                 return plays;
             }, [playData]);
 
@@ -355,7 +455,11 @@
                     setPreviewStats(null);
                 }
                 }, [expandedPlayType, logPlayGroup, logVariation, calculatePreviewStars]);
-
+            
+            // Load game schedule on mount
+            useEffect(() => {
+                setGameSchedule(GAME_SCHEDULE_2025);
+            }, []);
 
             // Log a play outcome to Firebase
             const logPlayOutcome = async (outcome) => {
@@ -364,46 +468,102 @@
                     return;
                 }
 
+                if (!selectedGame) {
+                    alert('Please select a game first');
+                    return;
+                }
+
                 try {
                     setLogging(true);
                     
-                    const { typeId, groupId, varId } = selectedPlay;
-                    const playPath = `playcalls/${selectedYear}/${typeId}/${groupId}/${varId}`;
-                    const playRef = database.ref(playPath);
-                    const snapshot = await playRef.once('value');
-                    const currentData = snapshot.val() || {
-                        '-3': 0, '-2': 0, '+2': 0, '+2F': 0, '+3': 0, '+3F': 0,
-                        '-2F': 0, '-3F': 0, 'AvgPointsNoFTs': 0, 'FOF': 0,
-                        'MadeFG': 0, 'MissTO': 0, 'NOTHING': 0, 'NumCalls': 0, 'TO': 0
-                    };
+                    // Handle special types (transition, no play, what's next)
+                    let statsPath = null;
+                    let statsRef = null;
+                    let currentData = null;
+                    let updates = null;
+                    
+                    if (selectedPlay.type !== 'transition' && 
+                        selectedPlay.type !== 'no_play' && 
+                        selectedPlay.type !== 'whats_next') {
+                        
+                        // Regular playcall - update stats
+                        statsPath = `playcalls/${selectedYear}/stats/series/${selectedPlay.series}/${selectedPlay.playName}`;
+                        statsRef = database.ref(statsPath);
+                        const snapshot = await statsRef.once('value');
+                        currentData = snapshot.val() || {
+                            '-3': 0, '-2': 0, '+2': 0, '+2F': 0, '+3': 0, '+3F': 0,
+                            '-2F': 0, '-3F': 0, 'AvgPointsNoFTs': 0, 'FOF': 0,
+                            'MadeFG': 0, 'MissTO': 0, 'NOTHING': 0, 'NumCalls': 0, 'TO': 0
+                        };
 
-                    const updates = { ...currentData };
-                    updates[outcome] = (parseFloat(currentData[outcome]) || 0) + 1;
-                    updates.NumCalls = (parseInt(currentData.NumCalls) || 0) + 1;
+                        updates = { ...currentData };
+                        updates[outcome] = (parseFloat(currentData[outcome]) || 0) + 1;
+                        updates.NumCalls = (parseInt(currentData.NumCalls) || 0) + 1;
 
-                    const totalCalls = updates.NumCalls;
-                    const totalPoints = (updates['+2'] * 2) + (updates['+3'] * 3) + 
-                                    (updates['+2F'] * 2) + (updates['+3F'] * 3);
-                    updates.AvgPointsNoFTs = totalPoints / totalCalls;
+                        const totalCalls = updates.NumCalls;
+                        const totalPoints = (updates['+2'] * 2) + (updates['+3'] * 3) + 
+                                        (updates['+2F'] * 2) + (updates['+3F'] * 3);
+                        updates.AvgPointsNoFTs = totalPoints / totalCalls;
 
-                    const madeFG = updates['+2'] + updates['+3'] + updates['+2F'] + updates['+3F'];
-                    updates.MadeFG = madeFG / totalCalls;
+                        const madeFG = updates['+2'] + updates['+3'] + updates['+2F'] + updates['+3F'];
+                        updates.MadeFG = madeFG / totalCalls;
 
-                    const missTO = updates['-2'] + updates['-3'] + updates['-2F'] + updates['-3F'];
-                    updates.MissTO = missTO / totalCalls;
+                        const missTO = updates['-2'] + updates['-3'] + updates['-2F'] + updates['-3F'] + updates.TO;
+                        updates.MissTO = missTO / totalCalls;
 
-                    updates.NOTHING = updates.NOTHING / totalCalls;
-                    updates.TO = updates.TO / totalCalls;
-                    updates.FOF = updates['+2F'] + updates['+3F'] + updates['-2F'] + updates['-3F'];
+                        updates.FOF = updates['+2F'] + updates['+3F'] + updates['-2F'] + updates['-3F'];
 
-                    await playRef.set(updates);
+                        await statsRef.set(updates);
+                    }
+
+                    // Log to possessions (if not practice)
+                    if (selectedGame.date !== 'practice') {
+                        const possessionRef = database.ref(
+                            `playcalls/${selectedYear}/games/${selectedGame.date}/possessions`
+                        ).push();
+                        
+                        const possessionData = {
+                            possessionNumber: possessionCount,
+                            outcome: outcome,
+                            period: currentPeriod,
+                            timestamp: Date.now(),
+                            dateTime: new Date().toISOString(),
+                            points: outcome === '+3' || outcome === '+3F' ? 3 :
+                                    outcome === '+2' || outcome === '+2F' ? 2 : 0,
+                            madeShot: ['+2', '+3', '+2F', '+3F'].includes(outcome),
+                            turnover: outcome === 'TO',
+                            gameInfo: {
+                                opponent: selectedGame.opponent,
+                                location: selectedGame.location
+                            }
+                        };
+                        
+                        if (selectedPlay.type === 'transition') {
+                            possessionData.type = 'transition';
+                        } else if (selectedPlay.type === 'no_play') {
+                            possessionData.type = 'no_play';
+                        } else if (selectedPlay.type === 'whats_next') {
+                            possessionData.type = 'whats_next';
+                        } else {
+                            possessionData.type = 'playcall';
+                            possessionData.series = selectedPlay.series;
+                            possessionData.playName = selectedPlay.playName;
+                            possessionData.fullName = selectedPlay.fullName;
+                        }
+                        
+                        await possessionRef.set(possessionData);
+                        setPossessionCount(prev => prev + 1);
+                    }
 
                     setLastLoggedPlay({
-                        playPath,
+                        statsPath,
                         previousData: currentData,
                         playInfo: selectedPlay,
                         outcome,
-                        time: gameClockTime
+                        time: gameClockTime,
+                        gameDate: selectedGame.date,
+                        period: currentPeriod,
+                        isPractice: selectedGame.date === 'practice'
                     });
 
                     updateRecentPlays(selectedPlay.id);
@@ -430,14 +590,32 @@
                 }
             };
 
+            // Undo last logged play
             const undoLastPlay = async () => {
                 if (!lastLoggedPlay) return;
 
                 try {
                     setLogging(true);
 
-                    const playRef = database.ref(lastLoggedPlay.playPath);
-                    await playRef.set(lastLoggedPlay.previousData);
+                    // Restore stats if it was a playcall
+                    if (lastLoggedPlay.statsPath && lastLoggedPlay.previousData) {
+                        const statsRef = database.ref(lastLoggedPlay.statsPath);
+                        await statsRef.set(lastLoggedPlay.previousData);
+                    }
+
+                    // Remove from games if not practice
+                    if (!lastLoggedPlay.isPractice && lastLoggedPlay.gameDate) {
+                        const possessionsRef = database.ref(
+                            `playcalls/${selectedYear}/games/${lastLoggedPlay.gameDate}/possessions`
+                        );
+                        const snapshot = await possessionsRef.orderByChild('timestamp').limitToLast(1).once('value');
+                        
+                        snapshot.forEach((child) => {
+                            child.ref.remove();
+                        });
+                        
+                        setPossessionCount(prev => Math.max(0, prev - 1));
+                    }
 
                     await loadPlayData();
                     setLastLoggedPlay(null);
@@ -525,7 +703,7 @@
                 try {
                     setLoading(true);
                     
-                    const dbRef = database.ref(`playcalls/${selectedYear}`);
+                    const dbRef = database.ref(`playcalls/${selectedYear}/stats/series`);
                     const snapshot = await dbRef.once('value');
                     
                     if (!snapshot.exists()) {
@@ -538,12 +716,24 @@
                     const data = snapshot.val();
                     setPlayData(data);
                     setLastUpdated(new Date().toLocaleString());
-            } catch (error) {
-                console.error('Error fetching play data:', error);
-            } finally {
-                setLoading(false);
-            }
-        }, [selectedYear]);
+                } catch (error) {
+                    console.error('Error fetching play data:', error);
+                } finally {
+                    setLoading(false);
+                }
+            }, [selectedYear]);
+
+            const handleRefresh = async () => {
+                setLoading(true);
+                try {
+                    await loadPlayData();
+                } catch (error) {
+                    console.error('Error refreshing:', error);
+                    alert('Error refreshing data');
+                } finally {
+                    setLoading(false);
+                }
+            };
 
         // Load data on mount
         useEffect(() => {
@@ -863,6 +1053,7 @@
                         </div>
                     </div>
                     
+                    {/*
                     <div className="mb-6">
                         <label className={`block text-sm font-semibold mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
                             Game Clock
@@ -932,6 +1123,7 @@
                             Type time (e.g., "1245" → "12:45") or use buttons
                         </div>
                     </div>
+                    */}
                     
                     <div>
                         <label className={`block text-sm font-semibold mb-3 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
@@ -939,43 +1131,43 @@
                         </label>
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                             <button onClick={() => logPlayOutcome('+3')} disabled={logging}
-                                className={`px-4 py-4 rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-green-600`}>
+                                className={`px-6 py-8 text-xl rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-green-600`}>
                                 3PT MADE<br/>✓
                             </button>
                             <button onClick={() => logPlayOutcome('+2')} disabled={logging}
-                                className={`px-4 py-4 rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-green-500`}>
+                                className={`px-6 py-8 text-xl rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-green-500`}>
                                 2PT MADE<br/>✓
                             </button>
                             <button onClick={() => logPlayOutcome('-3')} disabled={logging}
-                                className={`px-4 py-4 rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-red-600`}>
+                                className={`px-6 py-8 text-xl rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-red-600`}>
                                 3PT MISS<br/>✗
                             </button>
                             <button onClick={() => logPlayOutcome('-2')} disabled={logging}
-                                className={`px-4 py-4 rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-red-500`}>
+                                className={`px-6 py-8 text-xl rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-red-500`}>
                                 2PT MISS<br/>✗
                             </button>
                             <button onClick={() => logPlayOutcome('+3F')} disabled={logging}
-                                className={`px-4 py-4 rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-green-600`}>
+                                className={`px-6 py-8 text-xl rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-green-600`}>
                                 3PT+FOUL<br/>✓
                             </button>
                             <button onClick={() => logPlayOutcome('+2F')} disabled={logging}
-                                className={`px-4 py-4 rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-green-500`}>
+                                className={`px-6 py-8 text-xl rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-green-500`}>
                                 2PT+FOUL<br/>✓
                             </button>
                             <button onClick={() => logPlayOutcome('-3F')} disabled={logging}
-                                className={`px-4 py-4 rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-red-600`}>
+                                className={`px-6 py-8 text-xl rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-red-600`}>
                                 3PT MISS<br/>+FOUL
                             </button>
                             <button onClick={() => logPlayOutcome('-2F')} disabled={logging}
-                                className={`px-4 py-4 rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-red-500`}>
+                                className={`px-6 py-8 text-xl rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-red-500`}>
                                 2PT MISS<br/>+FOUL
                             </button>
                             <button onClick={() => logPlayOutcome('TO')} disabled={logging}
-                                className={`px-4 py-4 rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-yellow-600`}>
+                                className={`px-6 py-8 text-xl rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-yellow-600`}>
                                 TURNOVER
                             </button>
                             <button onClick={() => logPlayOutcome('NOTHING')} disabled={logging}
-                                className={`px-4 py-4 rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} ${darkMode ? 'bg-gray-600' : 'bg-gray-400'}`}>
+                                className={`px-6 py-8 text-xl rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} ${darkMode ? 'bg-gray-600' : 'bg-gray-400'}`}>
                                 NOTHING
                             </button>
                         </div>
@@ -1141,7 +1333,8 @@
             );
         };
 
-        
+        /* Play Type Overview Component */
+        /*
         const PlayTypeOverview = () => {
             if (!playData) return null;
 
@@ -1285,7 +1478,7 @@
                                                     Log Play Call
                                                 </h4>
                                                 
-                                                {/* SEARCH BOX - ALWAYS VISIBLE */}
+                                                // SEARCH BOX
                                                 <div className="mb-4">
                                                     <label className={`block text-xs font-medium mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
                                                         Search for play
@@ -1302,7 +1495,7 @@
                                                         onClick={(e) => e.stopPropagation()}
                                                     />
                                                     
-                                                    {/* SEARCH RESULTS DROPDOWN */}
+                                                    // search results dropdown
                                                     {categorySearches[type] && filterPlays(categorySearches[type], type).length > 0 && (
                                                         <div className={`mt-2 border rounded-lg max-h-48 overflow-y-auto ${darkMode ? 'border-gray-600' : 'border-gray-300'}`}>
                                                             {filterPlays(categorySearches[type], type).map(play => (
@@ -1350,7 +1543,7 @@
                                                 </div>
 
                                                 <div className="space-y-3">
-                                                    {/* PLAY GROUP BUTTONS */}
+                                                    // play group buttons
                                                     <div>
                                                         <label className={`block text-xs font-medium mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
                                                             Or select manually - Play Group
@@ -1374,10 +1567,10 @@
                                                         </div>
                                                     </div>
 
-                                                    {/* PREVIEW STATS */}
+                                                    // play group stats
                                                     {logPlayGroup && <PreviewStatsDisplay />}
                                                     
-                                                    {/* VARIATION BUTTONS */}
+                                                    // variation buttons
                                                     {logPlayGroup && (
                                                         <div>
                                                             <label className={`block text-xs font-medium mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
@@ -1403,7 +1596,7 @@
                                                         </div>
                                                     )}
                                                     
-                                                    {/* OUTCOME BUTTONS */}
+                                                    // outcome buttons
                                                     {logVariation && (
                                                         <div>
                                                             <label className={`block text-xs font-medium mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
@@ -1514,6 +1707,7 @@
                 </div>
             );
         }
+        */
 
             return (
                 <div className="max-w-7xl mx-auto p-4">
@@ -1527,6 +1721,7 @@
                             <h1 className={`text-2xl font-bold ${darkMode ? 'text-white' : 'text-gray-800'}`}>
                                 Virginia Tech Basketball Play Calling Analytics
                             </h1>
+                            
                             <div className="flex flex-wrap items-center gap-3">
                                 <select
                                     value={selectedYear}
@@ -1541,18 +1736,61 @@
                                     }
                                 </select>
                                 
-                                <input
-                                    type="date"
-                                    value={selectedDate}
-                                    onChange={(e) => setSelectedDate(e.target.value)}
+                                <select
+                                    value={selectedGame?.id || ''}
+                                    onChange={(e) => {
+                                        const game = gameSchedule.find(g => g.id === e.target.value);
+                                        setSelectedGame(game);
+                                    }}
                                     className={`px-3 py-2 border rounded-md ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
-                                />
+                                >
+                                    <option value="">-- Select Game --</option>
+                                    {gameSchedule.map(game => (
+                                        <option key={game.id} value={game.id}>
+                                            {game.displayName}
+                                        </option>
+                                    ))}
+                                </select>
+
+                                {selectedGame && selectedGame.date !== 'practice' && (
+                                    <div className={`px-3 py-2 rounded-md font-semibold ${
+                                        darkMode ? 'bg-gray-700 text-blue-400' : 'bg-gray-100 text-blue-600'
+                                    }`}>
+                                        Possession #{possessionCount}
+                                    </div>
+                                )}
+                                
+                                
+                                {/*
+                                <div className = "flex items-center gap-2">
+                                    <button
+                                        onClick={() => setIsGameMode(!isGameMode)}
+                                        className={`px-4 py-2 rounded-md transition-colors ${
+                                            isGameMode 
+                                                ?  'bg-green-600 text-white hover:bg-green-700'
+                                                : darkMode
+                                                ? 'bg-gray-700 text-white hover:bg-gray-600'
+                                                : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                                        }`}
+                                    >
+                                        {isGameMode ? ' GAME MODE ' : ' PRACTICE MODE '}
+                                    </button>
+                                </div>
+                                */}
+                                    
                                 
                                 <button
-                                    onClick={loadPlayData}
-                                    className={`px-4 py-2 rounded-md transition-colors ${darkMode ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-blue-500 text-white hover:bg-blue-600'}`}
-                                >
-                                    Refresh
+                                onClick={handleRefresh}
+                                disabled={loading}
+                                className={`px-4 py-2 rounded-md transition-colors ${
+                                    loading
+                                        ? 'bg-gray-400 cursor-not-allowed'
+                                        : darkMode 
+                                            ? 'bg-blue-600 text-white hover:bg-blue-700' 
+                                            : 'bg-blue-500 text-white hover:bg-blue-600'
+                                }`}
+                            >
+                                {loading ? '↻ Refreshing...' : '↻ Refresh'}
                                 </button>
                                 
                                 <button
@@ -1570,20 +1808,92 @@
                         )}
                     </div>
 
-                    <UndoBanner />
-
-                    <GlobalSearchBox 
+                    <GameInfoHeader 
+                        selectedGame={selectedGame}
                         darkMode={darkMode}
-                        globalSearch={globalSearch}
-                        setGlobalSearch={setGlobalSearch}
-                        filterPlays={filterPlays}
-                        recentPlays={recentPlays}
-                        setSelectedPlay={setSelectedPlay}
                     />
 
-                    <SelectedPlayInterface />
+                    <UndoBanner />
 
-                    <PlayTypeOverview />
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                        <div className="lg:col-span-2">
+                            <GlobalSearchBox 
+                                darkMode={darkMode}
+                                globalSearch={globalSearch}
+                                setGlobalSearch={setGlobalSearch}
+                                filterPlays={filterPlays}
+                                recentPlays={recentPlays}
+                                setSelectedPlay={setSelectedPlay}
+                            />
+                        </div>
+
+                        <div className={`rounded-lg shadow-lg ${darkMode ? 'bg-gray-800' : 'bg-white'} p-6`}>
+                            <h3 className={`text-lg font-bold mb-4 text-center ${darkMode ? 'text-white' : 'text-gray-800'}`}>
+                                Quick Log
+                            </h3>
+                            <div className="flex flex-col gap-3">
+                                <button
+                                    onClick={() => setSelectedPlay({
+                                        type: 'transition',
+                                        name: 'Transition',
+                                        fullName: 'Transition',
+                                        displayName: 'Transition',
+                                    })}
+                                    className={`px-6 py-6 rounded-lg font-bold text-white transition-colors ${
+                                        selectedPlay?.type === 'transition' 
+                                            ? 'bg-[#630031] ring-4 ring-[#CF4420]'
+                                            : 'bg-[#630031] hover:bg-[#7a0039]'
+                                    }`}
+                                >
+                                Transition
+                                </button>
+                                <button
+                                    onClick={() => setSelectedPlay({
+                                        type: 'no_play',
+                                        name: 'No Play',
+                                        fullName: 'No Play',
+                                        displayName: 'No Play',
+                                    })}
+                                    className={`px-6 py-6 rounded-lg font-bold text-white transition-colors ${
+                                        selectedPlay?.type === 'no_play' 
+                                            ? 'bg-gray-700 ring-4 ring-gray-400'
+                                            : 'bg-gray-600 hover:bg-gray-700'
+                                    }`}
+                                >
+                                No Play
+                                </button>
+                                <button
+                                    onClick={() => setSelectedPlay({
+                                        type: 'whats_next',
+                                        name: "What's Next",
+                                        fullName: "What's Next",
+                                        displayName: "What's Next",
+                                    })}
+                                    className={`px-6 py-6 rounded-lg font-bold text-white transition-colors ${
+                                        selectedPlay?.type === 'whats_next' 
+                                            ? 'bg-[#CF4420] ring-4 ring-[#630031]'
+                                            : 'bg-[#CF4420] hover:bg-[#e05a35]'
+                                    }`}
+                                >
+                                What's Next
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <SelectedPlayInterface 
+                    selectedPlay={selectedPlay}
+                    darkMode={darkMode}
+                    gameClockTime={gameClockTime}
+                    setGameClockTime={setGameClockTime}
+                    lastLoggedTime={lastLoggedTime}
+                    decrementTime={decrementTime}
+                    formatTimeInput={formatTimeInput}
+                    logPlayOutcome={logPlayOutcome}
+                    logging={logging}
+                    />
+
+                    {/* <PlayTypeOverview /> */}
 
                     
 
