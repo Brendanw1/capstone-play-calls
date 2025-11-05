@@ -211,7 +211,7 @@
             );
         };
 
-        const GAME_SCHEDULE_2025 = [
+        const DEFAULT_SCHEDULE = [
             {
                 id: 'game-001',
                 date: '2025-11-04',
@@ -456,10 +456,48 @@
                 }
                 }, [expandedPlayType, logPlayGroup, logVariation, calculatePreviewStars]);
             
-            // Load game schedule on mount
+            // Load game schedule from Firebase
+            const loadGameSchedule = useCallback(() => {
+                const scheduleRef = database.ref(`playcalls/${selectedYear}/schedule`);
+                
+                // Real-time listener for schedule changes
+                const listener = scheduleRef.on('value', (snapshot) => {
+                    if (snapshot.exists()) {
+                        const scheduleData = snapshot.val();
+                        
+                        // Convert Firebase object to array
+                        const scheduleArray = Object.values(scheduleData);
+                        
+                        // Sort: games by date, practice at end
+                        scheduleArray.sort((a, b) => {
+                            if (a.date === 'practice') return 1;
+                            if (b.date === 'practice') return -1;
+                            return new Date(a.date) - new Date(b.date);
+                        });
+                        
+                        setGameSchedule(scheduleArray);
+                        console.log(`Loaded ${scheduleArray.length} games from Firebase`);
+                    } else {
+                        // No schedule in Firebase, use default
+                        console.log('No schedule in Firebase, using default');
+                        setGameSchedule(DEFAULT_SCHEDULE);
+                    }
+                }, (error) => {
+                    console.error('Error loading schedule:', error);
+                    setGameSchedule(DEFAULT_SCHEDULE);
+                });
+                
+                // Cleanup function
+                return () => {
+                    scheduleRef.off('value', listener);
+                };
+            }, [selectedYear]);
+
+            // Load schedule when year changes
             useEffect(() => {
-                setGameSchedule(GAME_SCHEDULE_2025);
-            }, []);
+                const cleanup = loadGameSchedule();
+                return cleanup;
+            }, [loadGameSchedule]);
 
             // Log a play outcome to Firebase
             const logPlayOutcome = async (outcome) => {
