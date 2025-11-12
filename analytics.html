@@ -65,7 +65,7 @@
 
       // Single search box + selected play
       const [query,setQuery]=useState('');
-      const [selected,setSelected]=useState(null); // {type, group, v, label}
+      const [selected,setSelected]=useState(null); //
 
       // charts
       const donutRef=useRef(null), donutInst=useRef(null);
@@ -143,12 +143,20 @@
       // Suggestions as user types: rank by N (frequency)
       const suggestions=useMemo(()=>{
         const q=query.trim().toLowerCase();
+
+        const seriesMatch = q.match(/^(alpha|bravo|charlie|delta|echo|foxtrot|golf|hotel|india|juliet|kilo|lima|mike|november|oscar)$/i);
+        
+        if (seriesMatch && inferredTypeKey && typeKeys.includes(inferredTypeKey)) {
+          const seriesPlays = indexAll.filter(p => p.type === inferredTypeKey);
+          return [...seriesPlays].sort((a, b) => b.n - a.n || a.label.localeCompare(b.label)).slice(0, 15);
+        }
+        
         const pool=inferredTypeKey
           ? indexAll.filter(p=>p.type===inferredTypeKey)
           : indexAll;
         const filtered=q?pool.filter(p=>p.label.toLowerCase().includes(q)):pool;
         return [...filtered].sort((a,b)=> b.n-a.n || a.label.localeCompare(b.label)).slice(0,8);
-      },[query,indexAll,inferredTypeKey]);
+      },[query,indexAll,inferredTypeKey, typeKeys]);
 
       // Top/Bottom 5 PPP, filtered to inferred type if available
       const ranks=useMemo(()=>{
@@ -163,7 +171,29 @@
       // Stats for selected play -> detail + charts
       const stats=useMemo(()=>{
         if(!selected || !playData) return null;
-        // Changed access by series/playnumber instead of type/group/v
+
+        // If only series, aggregate all plays in that series
+        if(selected.isSeries){
+          const playsInSeries=playData[selected.series]||{};
+          const agg={
+            numCalls:0, NumCalls:0,
+            '+2':0,'+3':0, '+2F':0,'+3F':0,
+            '-2':0,'-3':0, '-2F':0,'-3F':0,
+            'NOTHING':0, 'TO':0, 'FOF':0
+          };
+
+          Object.keys(playsInSeries).forEach(playNumber=>{
+            const s=playsInSeries[playNumber]||{};
+            agg.numCalls+=parseInt(s.numCalls||s.NumCalls)||0;
+            agg.NumCalls+=parseInt(s.NumCalls||s.numCalls)||0;
+            ['+2','+3','+2F','+3F','-2','-3','-2F','-3F','NOTHING','TO','FOF'].forEach(key=>{
+              agg[key]+=(+s[key]||0);
+            });
+          });
+          return agg;
+        }
+
+        // Changed access by series instead of type/group/v
         return playData[selected.series]?.[selected.playNumber] || null;
       },[selected,playData]);
 
@@ -220,6 +250,41 @@
         });
       },[stats,dark]);
 
+      // Handling Suggestions and Selection
+      const handleSuggestionClick=(suggestion)=>{
+        const q=query.trim().toLowerCase();
+        const seriesMatch=q.match(/^(alpha|bravo|charlie|delta|echo|foxtrot|golf|hotel|india|juliet|kilo|lima|mike|november|oscar)$/i);
+
+        if (seriesMatch){
+          setSelected({
+            label: suggestion.series,
+            isSeries: true,
+            series: suggestion.series
+          });
+          setQuery(suggestion.series);
+        } else {
+          setSelected(suggestion);
+          setQuery(suggestion.label);
+        }
+      };
+
+      const handleSearchKeyDown=(e)=>{
+        if(e.key==='Enter'){
+          const q=query.trim().toLowerCase();
+          const seriesMatch=q.match(/^(alpha|bravo|charlie|delta|echo|foxtrot|golf|hotel|india|juliet|kilo|lima|mike|november|oscar)$/i);
+
+          if (seriesMatch && inferredTypeKey){
+            setSelected({
+              label: inferredTypeKey,
+              isSeries: true,
+              series: inferredTypeKey
+            });
+          } else if(suggestions.length>0){
+            handleSuggestionClick(suggestions[0]);
+          }
+        }
+      };
+
       return (
         <div className="max-w-7xl mx-auto p-4">
           {/* Header */}
@@ -265,11 +330,12 @@
             <>
               {/* Search only (no play-type bar). Suggestions ranked by N. */}
               <div className={`rounded-lg shadow p-4 mb-4 ${dark?'bg-gray-800':'bg-white'}`}>
-                <label className="text-sm block mb-1">Search playcall (e.g., <span className="opacity-80">Alpha 1</span>)</label>
+                <label className="text-sm block mb-1">Search playcall (e.g., <span className="opacity-80">Alpha 1</span> or <span className="opacity-80">November</span>)</label>
                 <input
                   type="text"
                   value={query}
                   onChange={(e)=>{ setQuery(e.target.value); /* do not clear selected so charts can stay */ }}
+                  onKeyDown={handleSearchKeyDown}
                   placeholder="Start typing…"
                   className={`w-full px-3 py-2 rounded border ${dark?'bg-gray-700 border-gray-600 text-white placeholder-gray-400':'bg-white border-gray-300'}`}
                 />
@@ -298,7 +364,7 @@
                   </div>
                   <table className="tbl w-full">
                     <thead className={`${dark?'bg-gray-900 text-gray-200':'bg-gray-100 text-gray-700'}`}>
-                      <tr><th className="text-left">Play</th><th className="text-right">N</th><th className="text-right">Pts/Play</th></tr>
+                      <tr><th className="text-left">Play</th><th className="text-right">Times Called</th><th className="text-right">Pts/Play</th></tr>
                     </thead>
                     <tbody>
                       {ranks.top.length===0 && (<tr><td colSpan="3" className="py-3 text-sm opacity-70">No plays.</td></tr>)}
@@ -321,7 +387,7 @@
                   </div>
                   <table className="tbl w-full">
                     <thead className={`${dark?'bg-gray-900 text-gray-200':'bg-gray-100 text-gray-700'}`}>
-                      <tr><th className="text-left">Play</th><th className="text-right">N</th><th className="text-right">Pts/Play</th></tr>
+                      <tr><th className="text-left">Play</th><th className="text-right">Times Called</th><th className="text-right">Pts/Play</th></tr>
                     </thead>
                     <tbody>
                       {ranks.bottom.length===0 && (<tr><td colSpan="3" className="py-3 text-sm opacity-70">No plays.</td></tr>)}
@@ -342,13 +408,13 @@
               {selected && stats && header && (
                 <div className={`rounded-lg shadow p-6 ${dark?'bg-gray-800':'bg-white'}`}>
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-bold">{selected.label}</h3>
+                    <h3 className="text-lg font-bold">{selected.label}{selected.isSeries && ' (All Plays)'}</h3>
                     <button className={`pill ${dark?'bg-gray-700':'bg-gray-200'}`} onClick={()=>setSelected(null)}>Clear</button>
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                     <div>
                       <div className="text-sm opacity-75">Avg Points</div>
-                      <div className={`text-2xl font-bold ${header.ppp>1?'text-green-500':header.ppp<0.5?'text-red-500':'text-blue-500'}`}>{header.ppp.toFixed(2)}</div>
+                      <div className={`text-2xl font-bold ${header.ppp>1.15?'text-green-500':header.ppp<0.95?'text-red-500':'text-blue-500'}`}>{header.ppp.toFixed(2)}</div>
                     </div>
                     <div>
                       <div className="text-sm opacity-75">Times Called</div>
@@ -356,7 +422,7 @@
                     </div>
                     <div>
                       <div className="text-sm opacity-75">FG %</div>
-                      <div className={`text-2xl font-bold ${header.fg>40?'text-green-500':header.fg<30?'text-red-500':'text-blue-500'}`}>{header.fg.toFixed(1)}%</div>
+                      <div className={`text-2xl font-bold ${header.fg>43?'text-green-500':header.fg<37?'text-red-500':'text-blue-500'}`}>{header.fg.toFixed(1)}%</div>
                     </div>
                     <div>
                       <div className="text-sm opacity-75">Fouls on FGs</div>
