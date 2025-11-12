@@ -72,6 +72,315 @@
             }
         }
 
+        /* Possession Counter style */
+        .possession-counter {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.5rem 1rem;
+            background: linear-gradient(135deg, #3b82f6, #2563eb 100%);
+            border-radius: 8px;
+            color: white;
+            font-weight: bold;
+        }
+
+        .possession-label {
+            font-size: 0.85rem;
+            opacity: 0.9;
+        }
+
+        .possession-value {
+            font-size: 1.8rem;
+            line-height: 1;
+            min-width: 40px;
+            text-align: center;
+        }
+
+        .possession-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .possession-btn {
+            width: 24px;
+            height: 20px;
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 0.9em;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .possession-btn:first-child {
+            border-radius: 4px 4px 0 0;
+        }
+
+        .possession-btn:last-child {
+            border-radius: 0 0 4px 4px;
+        }
+
+        .possession-btn:hover {
+            background: rgba(255, 255, 255, 0.4);
+        }
+
+        /* Add Play Button */
+        .add-play-btn {
+            width: 100%;
+            margin-top: 1rem;
+            padding: 0.75rem;
+            background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            transition: all 0.3s;
+            box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+        }
+
+        .add-play-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(139, 92, 246, 0.4);
+        }
+
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+            animation: fadeIn 0.2s;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .modal {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            max-width: 600px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            animation: slideUp 0.3s;
+        }
+
+        .dark-mode .modal {
+            background: #1f2937;
+            color: #f9fafb;
+        }
+
+        @keyframes slideUp {
+            from { 
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to { 
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 2px solid #e5e7eb;
+        }
+
+        .dark-mode .modal-header {
+            border-bottom-color: #374151;
+        }
+
+        .modal-title {
+            font-size: 1.5em;
+            font-weight: bold;
+        }
+
+        .modal-close {
+            width: 32px;
+            height: 32px;
+            border-radius: 6px;
+            background: #f1f5f9;
+            border: none;
+            cursor: pointer;
+            font-size: 1.2em;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+
+        .dark-mode .modal-close {
+            background: #374151;
+            color: #f9fafb;
+        }
+
+        .modal-close:hover {
+            background: #ef4444;
+            color: white;
+        }
+
+        .modal-tabs {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .modal-tab {
+            flex: 1;
+            padding: 0.75rem;
+            background: #f1f5f9;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            text-align: center;
+            transition: all 0.2s;
+            color: #64748b;
+        }
+
+        .dark-mode .modal-tab {
+            background: #374151;
+            color: #9ca3af;
+        }
+
+        .modal-tab.active {
+            background: #3b82f6;
+            color: white;
+        }
+
+        .modal-tab:hover:not(.active) {
+            background: #e2e8f0;
+        }
+
+        .dark-mode .modal-tab:hover:not(.active) {
+            background: #4b5563;
+        }
+
+        .modal-content {
+            margin-bottom: 1.5rem;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        .btn-primary {
+            flex: 1;
+            padding: 0.875rem;
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.05em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+        }
+
+        .btn-secondary {
+            padding: 0.875rem 1.5rem;
+            background: #f1f5f9;
+            color: #64748b;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .dark-mode .btn-secondary {
+            background: #374151;
+            color: #9ca3af;
+        }
+
+        .btn-secondary:hover {
+            background: #e2e8f0;
+        }
+
+        .dark-mode .btn-secondary:hover {
+            background: #4b5563;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            color: #475569;
+        }
+
+        .dark-mode .form-group label {
+            color: #d1d5db;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 0.75rem;
+            border: 2px solid #e5e7eb;
+            border-radius: 6px;
+            font-size: 1rem;
+            transition: all 0.2s;
+            background: white;
+            color: #111827;
+        }
+
+        .dark-mode .form-group input,
+        .dark-mode .form-group select {
+            background: #374151;
+            border-color: #4b5563;
+            color: #f9fafb;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .helper-text {
+            font-size: 0.85em;
+            color: #64748b;
+            margin-top: 0.5rem;
+        }
+
+        .dark-mode .helper-text {
+            color: #9ca3af;
+        }
+
+
     </style>
 </head>
 <body class="dark-mode">
@@ -121,6 +430,7 @@
         };
 
         // Global Search Box Component
+        {/*
         const GlobalSearchBox = ({ darkMode, globalSearch, setGlobalSearch, filterPlays, recentPlays, setSelectedPlay }) => {
             const filteredPlays = filterPlays(globalSearch);
 
@@ -157,7 +467,7 @@
                                     }`}
                                 >
                                     <div className="font-medium">{play.fullName}</div>
-                                    {/*
+                                {/*
                                     <div className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
                                         {play.displayName} • {parseInt(play.data.NumCalls) || 0} calls • 
                                         <span className={`font-semibold ${
@@ -179,7 +489,7 @@
                                             (parseInt(play.data.NumCalls) || 1) * 100).toFixed(1)}% FG
                                         </span>
                                     </div>
-                                */}
+                                */} {/*
                                 </button>
                             ))}
                         </div>
@@ -209,7 +519,8 @@
                     )}
                 </div>
             );
-        };
+        };        
+    */}
 
         const DEFAULT_SCHEDULE = [
             {
@@ -241,7 +552,7 @@
         const GameInfoHeader = ({ selectedGame, darkMode }) => {
             if (!selectedGame) {
                 return (
-                    <div className={`p-2 rounded-lg mb-4 text-center ${
+                    <div className={`p-4 rounded-lg mb-4 text-center ${
                         darkMode ? 'bg-red-900/20 border border-red-700' : 'bg-red-50 border border-red-200'
                     }`}>
                         <span className={`text-sm font-medium ${darkMode ? 'text-red-400' : 'text-red-600'}`}>
@@ -254,11 +565,11 @@
             if (selectedGame.date === 'practice') {
                 return (
                     <div className={`p-2 rounded-lg mb-4 ${
-                        darkMode ? 'bg-yellow-900/20 border border-yellow-700' : 'bg-yellow-50 border border-yellow-200'
+                        darkMode ? 'bg-yellow-900/20 border-2 border-yellow-700' : 'bg-yellow-50 border-2 border-yellow-200'
                     }`}>
-                        <div className="flex items-center justify-center gap-2">
+                        <div className="flex items-center justify-center gap-3">
                             <span className="text-lg">🏋️</span>
-                            <span className={`text-sm font-medium ${darkMode ? 'text-yellow-400' : 'text-yellow-700'}`}>
+                            <span className={`text-base font-medium ${darkMode ? 'text-yellow-400' : 'text-yellow-700'}`}>
                                 Practice Mode - Stats only (no possession logging)
                             </span>
                         </div>
@@ -267,10 +578,10 @@
             }
 
             return (
-                <div className={`p-2 rounded-lg mb-4 ${
+                <div className={`p-4 rounded-lg mb-4 ${
                     darkMode ? 'bg-blue-900/20 border border-blue-700' : 'bg-blue-50 border border-blue-200'
                 }`}>
-                    <div className="flex items-center justify-center gap-4 text-sm">
+                    <div className="flex items-center justify-center gap-4 text-base">
                         <span className={`font-semibold ${darkMode ? 'text-blue-400' : 'text-blue-700'}`}>
                              {selectedGame.date}
                         </span>
@@ -302,9 +613,6 @@
             const [currentPeriod, setCurrentPeriod] = useState('1st Half');
             const [gameSchedule, setGameSchedule] = useState([]);
             const [selectedGame, setSelectedGame] = useState(null);
-            
-            
-
 
             // Play Selections Stats
             const [selectedPlayType, setSelectedPlayType] = useState('');
@@ -341,6 +649,10 @@
             const [showUndo, setShowUndo] = useState(false);
             const [lastLoggedPlay, setLastLoggedPlay] = useState(null);
 
+            // Added new state variables for possessions and adding plays
+            // const [possessionCount, setPossessionCount] = useState(0); (wont use for now)
+            const [manualPossessionAdjustment, setManualPossessionAdjustment] = useState(0);
+            const [showAddPlayModal, setShowAddPlayModal] = useState(false);
 
 
             // Update body class when dark mode changes
@@ -1081,12 +1393,12 @@
             if (!selectedPlay) return null;
 
             return (
-                <div className={`rounded-lg shadow-lg ${darkMode ? 'bg-gray-800 border-2 border-blue-500' : 'bg-white border-2 border-blue-400'} p-6 mb-6`}>
-                    <div className="mb-4">
-                        <div className={`text-sm font-semibold ${darkMode ? 'text-blue-400' : 'text-blue-600'}`}>
-                            SELECTED PLAY
+                <div className={`rounded-lg shadow-lg ${darkMode ? 'bg-gray-800 border-2 border-blue-500' : 'bg-white border-2 border-blue-400'} p-5 mb-4`}>
+                    <div className="mb-3">
+                        <div className={`text-xs font-bold uppercase tracking-wide ${darkMode ? 'text-blue-400' : 'text-blue-600'}`}>
+                            Selected Play
                         </div>
-                        <div className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-gray-800'}`}>
+                        <div className={`text-xl font-bold mt-1 ${darkMode ? 'text-white' : 'text-gray-800'}`}>
                             {selectedPlay.fullName}
                         </div>
                     </div>
@@ -1164,49 +1476,49 @@
                     */}
                     
                     <div>
-                        <label className={`block text-sm font-semibold mb-3 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                            SELECT OUTCOME
+                        <label className={`block text-sm font-bold mb-3 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                            Select Outcome
                         </label>
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
                             <button onClick={() => logPlayOutcome('+3')} disabled={logging}
-                                className={`px-6 py-8 text-xl rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-green-600`}>
-                                3PT MADE<br/>✓
+                                className={`px-4 py-6 text-xl rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-green-600`}>
+                                3PT Made<br/>✓
                             </button>
                             <button onClick={() => logPlayOutcome('+2')} disabled={logging}
-                                className={`px-6 py-8 text-xl rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-green-500`}>
-                                2PT MADE<br/>✓
+                                className={`px-4 py-6 text-xl rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-green-500`}>
+                                2PT Made<br/>✓
                             </button>
                             <button onClick={() => logPlayOutcome('-3')} disabled={logging}
-                                className={`px-6 py-8 text-xl rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-red-600`}>
-                                3PT MISS<br/>✗
+                                className={`px-4 py-6 text-xl rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-red-600`}>
+                                3PT Miss<br/>✗
                             </button>
                             <button onClick={() => logPlayOutcome('-2')} disabled={logging}
-                                className={`px-6 py-8 text-xl rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-red-500`}>
-                                2PT MISS<br/>✗
+                                className={`px-4 py-6 text-xl rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-red-500`}>
+                                2PT Miss<br/>✗
                             </button>
                             <button onClick={() => logPlayOutcome('+3F')} disabled={logging}
-                                className={`px-6 py-8 text-xl rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-green-600`}>
-                                3PT+FOUL<br/>✓
+                                className={`px-4 py-6 text-xl rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-green-600`}>
+                                3PT+Foul<br/>✓
                             </button>
                             <button onClick={() => logPlayOutcome('+2F')} disabled={logging}
-                                className={`px-6 py-8 text-xl rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-green-500`}>
-                                2PT+FOUL<br/>✓
+                                className={`px-4 py-6 text-xl rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-green-500`}>
+                                2PT+Foul<br/>✓
                             </button>
                             <button onClick={() => logPlayOutcome('-3F')} disabled={logging}
-                                className={`px-6 py-8 text-xl rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-red-600`}>
-                                3PT MISS<br/>+FOUL
+                                className={`px-4 py-6 text-xl rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-red-600`}>
+                                3PT Miss<br/>+Foul
                             </button>
                             <button onClick={() => logPlayOutcome('-2F')} disabled={logging}
-                                className={`px-6 py-8 text-xl rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-red-500`}>
-                                2PT MISS<br/>+FOUL
+                                className={`px-4 py-6 text-xl rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-red-500`}>
+                                2PT Miss<br/>+Foul
                             </button>
                             <button onClick={() => logPlayOutcome('TO')} disabled={logging}
-                                className={`px-6 py-8 text-xl rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-yellow-600`}>
-                                TURNOVER
+                                className={`px-4 py-6 text-xl rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-yellow-600`}>
+                                Turnover
                             </button>
                             <button onClick={() => logPlayOutcome('NOTHING')} disabled={logging}
-                                className={`px-6 py-8 text-xl rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} ${darkMode ? 'bg-gray-600' : 'bg-gray-400'}`}>
-                                NOTHING
+                                className={`px-4 py-6 text-xl rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} ${darkMode ? 'bg-gray-600' : 'bg-gray-400'}`}>
+                                Nothing
                             </button>
                         </div>
                     </div>
@@ -1245,7 +1557,7 @@
                             onClick={undoLastPlay}
                             className="px-4 py-2 bg-white text-green-600 rounded-lg font-bold hover:bg-gray-100 transition-colors"
                         >
-                            UNDO
+                            Undo
                         </button>
                     </div>
                 </div>
@@ -1749,7 +2061,7 @@
 
             return (
                 <div className="max-w-7xl mx-auto p-4">
-                    <div className={`rounded-lg shadow-md p-4 mb-6 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                    <div className={`rounded-lg shadow-md p-4 mb-4 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
                         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                             <img 
                                 src="https://upload.wikimedia.org/wikipedia/commons/thumb/6/60/Virginia_Tech_Hokies_logo.svg/2560px-Virginia_Tech_Hokies_logo.svg.png" 
@@ -1853,6 +2165,141 @@
 
                     <UndoBanner />
 
+                    <div className={`rounded-lg shadow-lg ${darkMode ? 'bg-gray-800' : 'bg-white'} p-5 mb-4`}>
+                        <div className="mb-2">
+                            <label className={`block text-sm font-bold mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                                Quick Search
+                            </label>
+                            <input
+                                type="text"
+                                value={globalSearch}
+                                onChange={(e) => setGlobalSearch(e.target.value)}
+                                placeholder="Type to search plays..."
+                                className={`w-full px-4 py-3 text-lg border-2 rounded-lg focus:outline-none ${
+                                    darkMode ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:bg-gray-700 focus:border-blue-500' 
+                                            : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500 focus:bg-white focus:border-blue-500'
+                                }`}
+                            />
+                        </div>
+
+                        {globalSearch && filterPlays(globalSearch).length > 0 && (
+                            <div className={`border-2 rounded-lg overflow-hidden mt-2 ${darkMode ? 'border-gray-600' : 'border-gray-300'}`}>
+                                {filterPlays(globalSearch).map(play => (
+                                    <button
+                                        key={play.id}
+                                        onClick={() => {
+                                            setSelectedPlay(play);
+                                            setGlobalSearch('');
+                                        }}
+                                        className={`w-full text-left px-4 py-2 border-b last:border-b-0 transition-colors ${
+                                            darkMode 
+                                                ? 'border-gray-600 hover:bg-gray-700 text-white' 
+                                                : 'border-gray-200 hover:bg-gray-50 text-gray-800'
+                                        }`}
+                                    >
+                                        <div className="font-semibold">{play.fullName}</div>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* New layout for quick log buttons*/}
+                    <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-4">
+                        <div className={`lg:col-span-3 rounded-lg shadow-lg ${darkMode ? 'bg-gray-800' : 'bg-white'} p-5`}>
+                            <h3 className={`text-sm font-bold mb-3 tracking-wide ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                                Quick Log
+                            </h3>
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setSelectedPlay({
+                                        type: 'transition',
+                                        name: 'Transition',
+                                        fullName: 'Transition',
+                                        displayName: 'Transition',
+                                    })}
+                                    className={`flex-1 px-6 py-5 rounded-lg font-bold text-white transition-all ${
+                                        selectedPlay?.type === 'transition' 
+                                            ? 'bg-[#630031] ring-4 ring-[#CF4420] transform scale-105 shadow-lg'
+                                            : 'bg-[#630031] hover:bg-[#7a0039] hover:scale-105'
+                                    }`}
+                                >
+                                Transition
+                                </button>
+                                <button
+                                    onClick={() => setSelectedPlay({
+                                        type: 'no_play',
+                                        name: 'No Play',
+                                        fullName: 'No Play',
+                                        displayName: 'No Play',
+                                    })}
+                                    className={`flex-1 px-6 py-5 rounded-lg font-bold text-white text-lg transition-all ${
+                                        selectedPlay?.type === 'no_play' 
+                                            ? 'bg-gray-700 ring-4 ring-gray-400 transform scale-105 shadow-lg'
+                                            : 'bg-gray-600 hover:bg-gray-700 hover:scale-105'
+                                    }`}  
+                                >
+                                No Play
+                                </button>
+                                <button
+                                    onClick={() => setSelectedPlay({
+                                        type: 'whats_next',
+                                        name: "What's Next",
+                                        fullName: "What's Next",
+                                        displayName: "What's Next",
+                                    })}
+                                    className={`flex-1 px-6 py-5 rounded-lg font-bold text-white transition-all ${
+                                        selectedPlay?.type === 'whats_next' 
+                                            ? 'bg-[#CF4420] ring-4 ring-[#630031] transform scale-105 shadow-lg'
+                                            : 'bg-[#CF4420] hover:bg-[#e05a35] hover:scale-105'
+                                    }`}
+                                >
+                                What's Next
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className={`rounded-lg shadow-lg ${darkMode ? 'bg-gray-800' : 'bg-white'} p-5`}>
+                            <h3 className={`text-sm font-bold mb-3 uppercase tracking-wide ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                                Recent Plays
+                            </h3>
+                            {recentPlays.length > 0 ? (
+                                <div className="overflow-y-auto max-h-[130px] pr-2 scrollbar-thin">
+                                    <div className="flex flex-col gap-2">
+                                        {recentPlays.map(play => (
+                                            <button
+                                                key={play.id}
+                                                onClick={() => setSelectedPlay(play)}
+                                                className={`px-3 py-2 rounded-lg transition-all text-left hover:scale-105 ${
+                                                    darkMode 
+                                                        ? 'bg-gray-700 hover:bg-gray-600 text-white' 
+                                                        : 'bg-gray-100 hover:bg-gray-200 text-gray-800'
+                                                }`}
+                                            >
+                                                <div className="font-semibold text-sm truncate">{play.displayName}</div>
+                                                <div className={`text-xs ${
+                                                    darkMode ? 'text-gray-400' : 'text-gray-600'
+                                                }`}>
+                                                    {play.count}x
+                                                </div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className={`text-sm text-center py-8 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                                    No recent plays
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                        
+
+
+
+                    {/* Old Search Box and Quick Log Buttons */}
+                    {/*
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
                         <div className="lg:col-span-2">
                             <GlobalSearchBox 
@@ -1869,7 +2316,7 @@
                             <h3 className={`text-lg font-bold mb-4 text-center ${darkMode ? 'text-white' : 'text-gray-800'}`}>
                                 Quick Log
                             </h3>
-                            <div className="flex flex-col gap-3">
+                            <div className="flex flex-row gap-3 flex-wrap justify-center">
                                 <button
                                     onClick={() => setSelectedPlay({
                                         type: 'transition',
@@ -1877,7 +2324,7 @@
                                         fullName: 'Transition',
                                         displayName: 'Transition',
                                     })}
-                                    className={`px-6 py-6 rounded-lg font-bold text-white transition-colors ${
+                                    className={`flex-1 min-w-[120px] px-6 py-6 rounded-lg font-bold text-white transition-colors ${
                                         selectedPlay?.type === 'transition' 
                                             ? 'bg-[#630031] ring-4 ring-[#CF4420]'
                                             : 'bg-[#630031] hover:bg-[#7a0039]'
@@ -1892,7 +2339,7 @@
                                         fullName: 'No Play',
                                         displayName: 'No Play',
                                     })}
-                                    className={`px-6 py-6 rounded-lg font-bold text-white transition-colors ${
+                                    className={`flex-1 min-w-[120px] px-6 py-6 rounded-lg font-bold text-white transition-colors ${
                                         selectedPlay?.type === 'no_play' 
                                             ? 'bg-gray-700 ring-4 ring-gray-400'
                                             : 'bg-gray-600 hover:bg-gray-700'
@@ -1907,7 +2354,7 @@
                                         fullName: "What's Next",
                                         displayName: "What's Next",
                                     })}
-                                    className={`px-6 py-6 rounded-lg font-bold text-white transition-colors ${
+                                    className={`flex-1 min-w-[120px] px-6 py-6 rounded-lg font-bold text-white transition-colors ${
                                         selectedPlay?.type === 'whats_next' 
                                             ? 'bg-[#CF4420] ring-4 ring-[#630031]'
                                             : 'bg-[#CF4420] hover:bg-[#e05a35]'
@@ -1918,6 +2365,7 @@
                             </div>
                         </div>
                     </div>
+                    */}
 
                     <SelectedPlayInterface 
                     selectedPlay={selectedPlay}
