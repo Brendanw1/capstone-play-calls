@@ -74,14 +74,17 @@
 
         /* Possession Counter style */
         .possession-counter {
-            display: flex;
+            display: inline-flex;
+            flex-direction: column;
             align-items: center;
-            gap: 0.75rem;
-            padding: 0.5rem 1rem;
-            background: linear-gradient(135deg, #3b82f6, #2563eb 100%);
+            justify-content: center;
+            gap: 0.25rem; 
+            padding: 0.5rem 0.75rem;
+            background: linear-gradient(135deg, #9eb4d6 0%, #98b4f2 100%);
             border-radius: 8px;
             color: white;
             font-weight: bold;
+            min-height: 40px;
         }
 
         .possession-label {
@@ -90,43 +93,68 @@
         }
 
         .possession-value {
-            font-size: 1.8rem;
+            font-size: 1.25rem;
             line-height: 1;
-            min-width: 40px;
-            text-align: center;
         }
 
         .possession-controls {
             display: flex;
-            flex-direction: column;
             gap: 2px;
+            margin-top: 2px;
         }
 
         .possession-btn {
-            width: 24px;
-            height: 20px;
-            background: rgba(255, 255, 255, 0.2);
+            width: 30px; /* Adjust button size */
+            height: 30px;
+            min-width: 24px;
+            min-height: 24px;
+            padding: 0;
+            flex-shrink: 0;
+            background: rgba(45, 223, 13, 0.959);
             border: none;
             color: white;
             cursor: pointer;
             font-weight: bold;
-            font-size: 0.9em;
+            font-size: 0.95em;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            line-height: 1;
+        }
+
+        .possession-btn2 {
+            width: 30px; /* Adjust button size */
+            height: 30px;
+            min-width: 24px;
+            min-height: 24px;
+            padding: 0;
+            flex-shrink: 0;
+            background: rgba(246, 23, 23, 0.959);
+            border: none;
+            color: white;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 0.95em;
             transition: all 0.2s;
             display: flex;
             align-items: center;
             justify-content: center;
-        }
-
-        .possession-btn:first-child {
-            border-radius: 4px 4px 0 0;
-        }
-
-        .possession-btn:last-child {
-            border-radius: 0 0 4px 4px;
+            border-radius: 50%;
+            line-height: 1;
         }
 
         .possession-btn:hover {
-            background: rgba(255, 255, 255, 0.4);
+            background: rgba(109, 237, 87, 0.908);
+        }
+
+        .possession-btn2:hover {
+            background: rgba(247, 52, 52, 0.959);
+        }
+
+        .possession-btn:active {
+            transform: scale(0.95);
         }
 
         /* Add Play Button */
@@ -653,6 +681,12 @@
             // const [possessionCount, setPossessionCount] = useState(0); (wont use for now)
             const [manualPossessionAdjustment, setManualPossessionAdjustment] = useState(0);
             const [showAddPlayModal, setShowAddPlayModal] = useState(false);
+            const [showFreeThrowModal, setShowFreeThrowModal] = useState(false);
+            const [freeThrowData, setFreeThrowData] = useState({
+                outcome: null,
+                made: 0,
+                attempts: 0
+            });
 
 
             // Update body class when dark mode changes
@@ -749,13 +783,18 @@
                 return `${numbers.slice(0, -2)}:${numbers.slice(-2)}`;
             };
 
-            const updateRecentPlays = useCallback((playId) => {
+            const updateRecentPlays = useCallback((playId, outcome) => {
                 setRecentPlays(prev => {
                     const filtered = prev.filter(p => p.id !== playId);
                     const play = getAllPlays().find(p => p.id === playId);
                     if (!play) return prev;
-
-                    return [{...play, count: (prev.find(p => p.id === playId)?.count || 0) + 1}, ...filtered].slice(0, 5);
+                    
+                    const existingPlay = prev.find(p => p.id === playId);
+                    return [{
+                        ...play, 
+                        count: (existingPlay?.count || 0) + 1,
+                        lastOutcome: outcome
+                    }, ...filtered].slice(0, 5);
                 });
             }, [getAllPlays]);
 
@@ -812,7 +851,7 @@
             }, [loadGameSchedule]);
 
             // Log a play outcome to Firebase
-            const logPlayOutcome = async (outcome) => {
+            const logPlayOutcome = async (outcome, ftMade = null) => {
                 if (!selectedPlay) {
                     alert('Please select a play first');
                     return;
@@ -822,6 +861,32 @@
                     alert('Please select a game first');
                     return;
                 }
+
+                const needsFreeThrows = ['+2F', '+3F', '-2F', '-3F', 'Foul_Bonus'].includes(outcome);
+
+                if (needsFreeThrows && ftMade === null) {
+                    let attempts = 2;
+                    if (outcome === '+2F' || outcome === '+3F') {
+                        attempts = 1;
+                    } else if (outcome === '-3F') {
+                        attempts = 3;
+                    } else if (outcome === '-2F') {
+                        attempts = 2;
+                    } else if (outcome === 'Foul_Bonus') {
+                        attempts = 2;
+                    }
+
+
+                    setFreeThrowData({
+                        outcome: outcome, 
+                        made: 0, 
+                        attempts: attempts
+                    });
+                    setShowFreeThrowModal(true);
+                    return;
+                }
+
+                const actualFtMade = ftMade === null ? 0 : ftMade;
 
                 try {
                     setLogging(true);
@@ -843,7 +908,8 @@
                         currentData = snapshot.val() || {
                             '-3': 0, '-2': 0, '+2': 0, '+2F': 0, '+3': 0, '+3F': 0,
                             '-2F': 0, '-3F': 0, 'AvgPointsNoFTs': 0, 'FOF': 0,
-                            'MadeFG': 0, 'MissTO': 0, 'NOTHING': 0, 'NumCalls': 0, 'TO': 0
+                            'MadeFG': 0, 'MissTO': 0, 'NOTHING': 0, 'NumCalls': 0, 'TO': 0,
+                            'Foul_Floor': 0, 'Foul_Bonus': 0
                         };
 
                         updates = { ...currentData };
@@ -851,8 +917,13 @@
                         updates.NumCalls = (parseInt(currentData.NumCalls) || 0) + 1;
 
                         const totalCalls = updates.NumCalls;
-                        const totalPoints = (updates['+2'] * 2) + (updates['+3'] * 3) + 
+                        let totalPoints = (updates['+2'] * 2) + (updates['+3'] * 3) + 
                                         (updates['+2F'] * 2) + (updates['+3F'] * 3);
+                        
+                        if (needsFreeThrows) {
+                            totalPoints += actualFtMade;
+                        }
+
                         updates.AvgPointsNoFTs = totalPoints / totalCalls;
 
                         const madeFG = updates['+2'] + updates['+3'] + updates['+2F'] + updates['+3F'];
@@ -872,16 +943,24 @@
                             `playcalls/${selectedYear}/games/${selectedGame.date}/possessions`
                         ).push();
                         
+                        let points = 0;
+                        if (outcome === '+3' || outcome === '+3F') points = 3;
+                        else if (outcome === '+2' || outcome === '+2F') points = 2;
+                        points += actualFtMade;
+
                         const possessionData = {
                             possessionNumber: possessionCount,
                             outcome: outcome,
                             period: currentPeriod,
                             timestamp: Date.now(),
                             dateTime: new Date().toISOString(),
-                            points: outcome === '+3' || outcome === '+3F' ? 3 :
-                                    outcome === '+2' || outcome === '+2F' ? 2 : 0,
+                            points: points,
+                            freeThrowsMade: actualFtMade,
+                            freeThrowsAttempted: freeThrowData.attempts || 0,
                             madeShot: ['+2', '+3', '+2F', '+3F'].includes(outcome),
+                            foul: ['Foul_Floor', 'Foul_Bonus', '+2F', '+3F', '-2F', '-3F'].includes(outcome),
                             turnover: outcome === 'TO',
+
                             gameInfo: {
                                 opponent: selectedGame.opponent,
                                 location: selectedGame.location
@@ -910,13 +989,14 @@
                         previousData: currentData,
                         playInfo: selectedPlay,
                         outcome,
+                        ftMade: actualFtMade,
                         time: gameClockTime,
                         gameDate: selectedGame.date,
                         period: currentPeriod,
                         isPractice: selectedGame.date === 'practice'
                     });
 
-                    updateRecentPlays(selectedPlay.id);
+                    updateRecentPlays(selectedPlay.id, outcome);
 
                     if (gameClockTime) {
                         setLastLoggedTime(gameClockTime);
@@ -938,6 +1018,12 @@
                 } finally {
                     setLogging(false);
                 }
+            };
+
+            // Handle Free throws
+            const handleFreeThrowSubmit = (ftMade) => {
+                setShowFreeThrowModal(false);
+                logPlayOutcome(freeThrowData.outcome, ftMade);
             };
 
             // Undo last logged play
@@ -979,6 +1065,226 @@
                     setLogging(false);
                 }
             };
+
+            // Free Throw Modal Component
+            const FreeThrowModal = ({ isOpen, onClose, onSubmit, outcomeType, maxAttempts}) => {
+                const [ftMade, setFtMade] = useState(0);
+                const maxFTs = maxAttempts || 2;
+
+                if (!isOpen) return null;
+
+                const handleSubmit = () => {
+                    onSubmit(ftMade);
+                    setFtMade(0);
+                };
+
+                const outcomeLabels = {
+                    '+2F': '2PT Made + Foul',
+                    '-2F': '2PT Missed + Foul',
+                    '+3F': '3PT Made + Foul',
+                    '-3F': '3PT Missed + Foul',
+                    'Foul_Floor': 'Foul Only',
+                    'Foul_Bonus': 'Foul On Floor - Bonus'
+                };
+
+                return(
+                    <div className="modal-overlay" onClick={onClose}>
+                        <div className="modal" onClick={(e) => e.stopPropagation()}>
+                            <div className="modal-header">
+                                <div className="modal-title">Free Throws</div>
+                                <button className="modal-close" onClick={onClose}>✕</button>
+                            </div>
+
+                            <div className="modal-content">
+                                <div className={`p-4 rounded-lg mb-4 text-center ${
+                                    darkMode ? 'bg-blue-900/20 border-2 border-blue-700' : 'bg-blue-50 border-2 border-blue-200'
+                                }`}>
+                                    <div className={`text-lg font-bold ${darkMode ? 'text-blue-300' : 'text-blue-700'}`}>
+                                        {outcomeLabels[outcomeType]}
+                                    </div>
+                                </div>
+
+                                <div className="text-center mb-6">
+                                    <div className={`text-sm font-semibold mb-3 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                                        Free Throws Made
+                                    </div>
+                                    <div className="flex justify-center gap-4 mb-4">
+                                        <button
+                                            onClick={() => setFtMade(Math.max(0, ftMade - 1))}
+                                            className={`w-16 h-16 rounded-lg font-bold text-2xl transition-all ${
+                                                darkMode ? 'bg-gray-700 text-white hover:bg-gray-600' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                                            }`}
+                                        >
+                                            −
+                                        </button>
+                                        <div className={`w-24 h-16 rounded-lg flex items-center justify-center text-4xl font-bold ${
+                                            darkMode ? 'bg-blue-600 text-white' : 'bg-blue-500 text-white'
+                                        }`}>
+                                            {ftMade}
+                                        </div>
+                                        <button
+                                            onClick={() => setFtMade(Math.min(maxFTs, ftMade + 1))}
+                                            className={`w-16 h-16 rounded-lg font-bold text-2xl transition-all ${
+                                                darkMode ? 'bg-gray-700 text-white hover:bg-gray-600' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                                            }`}
+                                        >
+                                            +
+                                        </button>
+                                    </div>
+                                    <div className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                                        out of {maxFTs} attempts
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="modal-actions">
+                                <button className="btn-primary" onClick={handleSubmit}>
+                                    Submit ({ftMade}/{maxFTs} FT)
+                                </button>
+                                <button className="btn-secondary" onClick={onClose}>
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            // Add Play Modal Component
+            const AddPlayModal = ({ isOpen, onClose }) => {
+                const [activeTab, setActiveTab] = useState('series');
+                const [formData, setFormData] = useState({
+                    seriesName: '',
+                    playName: ''
+                });
+
+                if (!isOpen) return null;
+
+                const handleSubmit = async () => {
+                    try {
+                        if (activeTab === 'series' && formData.seriesName && formData.playName) {
+                            const path = `playcalls/${selectedYear}/stats/series/${formData.seriesName}/${formData.playName}`;
+                            await database.ref(path).set({
+                                '-3': 0, '-2': 0, '+2': 0, '+2F': 0, '+3': 0, '+3F': 0,
+                                '-2F': 0, '-3F': 0, 'AvgPointsNoFTs': 0, 'FOF': 0,
+                                'MadeFG': 0, 'MissTO': 0, 'NOTHING': 0, 'NumCalls': 0, 'TO': 0,
+                                'Foul_Floor': 0, 'Foul_Bonus': 0
+                            });
+                            alert(`Created: ${formData.seriesName} - ${formData.playName}`);
+                        } else if (activeTab === 'play' && formData.seriesName && formData.playName) {
+                            const path = `playcalls/${selectedYear}/stats/series/${formData.seriesName}/${formData.playName}`;
+                            await database.ref(path).set({
+                                '-3': 0, '-2': 0, '+2': 0, '+2F': 0, '+3': 0, '+3F': 0,
+                                '-2F': 0, '-3F': 0, 'AvgPointsNoFTs': 0, 'FOF': 0,
+                                'MadeFG': 0, 'MissTO': 0, 'NOTHING': 0, 'NumCalls': 0, 'TO': 0,
+                                'Foul_Floor': 0, 'Foul_Bonus': 0
+                            });
+                            alert(`Added play: ${formData.playName} to ${formData.seriesName}`);
+                        } else {
+                            alert('Please fill in all fields');
+                            return;
+                        }
+
+                        await loadPlayData();
+                        setFormData({ seriesName: '', playName: '' });
+                        onClose();
+                    } catch (error) {
+                        console.error('Error creating play:', error);
+                        alert('Error creating play. Check console.');
+                    }
+                };
+
+                const existingSeries = playData ? Object.keys(playData).sort() : [];
+
+                return (
+                    <div className="modal-overlay" onClick={onClose}>
+                        <div className="modal" onClick={(e) => e.stopPropagation()}>
+                            <div className="modal-header">
+                                <div className="modal-title">➕ Add New Play</div>
+                                <button className="modal-close" onClick={onClose}>✕</button>
+                            </div>
+
+                            <div className="modal-tabs">
+                                <button
+                                    className={`modal-tab ${activeTab === 'series' ? 'active' : ''}`}
+                                    onClick={() => setActiveTab('series')}
+                                >
+                                    New Series
+                                </button>
+                                <button
+                                    className={`modal-tab ${activeTab === 'play' ? 'active' : ''}`}
+                                    onClick={() => setActiveTab('play')}
+                                >
+                                    Add to Existing
+                                </button>
+                            </div>
+
+                            <div className="modal-content">
+                                {activeTab === 'series' && (
+                                    <>
+                                        <div className="form-group">
+                                            <label>Series Name</label>
+                                            <input
+                                                type="text"
+                                                value={formData.seriesName}
+                                                onChange={(e) => setFormData({...formData, seriesName: e.target.value})}
+                                                placeholder="e.g., Horns, Motion, UCLA"
+                                            />
+                                            <div className="helper-text">Create a new play series/category</div>
+                                        </div>
+                                        <div className="form-group">
+                                            <label>Play</label>
+                                            <input
+                                                type="text"
+                                                value={formData.playName}
+                                                onChange={(e) => setFormData({...formData, playName: e.target.value})}
+                                                placeholder="e.g., 1, 2, 3"
+                                            />
+                                        </div>
+                                    </>
+                                )}
+
+                                {activeTab === 'play' && (
+                                    <>
+                                        <div className="form-group">
+                                            <label>Select Existing Series</label>
+                                            <select
+                                                value={formData.seriesName}
+                                                onChange={(e) => setFormData({...formData, seriesName: e.target.value})}
+                                            >
+                                                <option value="">Choose series...</option>
+                                                {existingSeries.map(series => (
+                                                    <option key={series} value={series}>{series}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="form-group">
+                                            <label>New Play</label>
+                                            <input
+                                                type="text"
+                                                value={formData.playName}
+                                                onChange={(e) => setFormData({...formData, playName: e.target.value})}
+                                                placeholder="e.g., 1, 2, 3"
+                                            />
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+
+                            <div className="modal-actions">
+                                <button className="btn-primary" onClick={handleSubmit}>
+                                    Add Play
+                                </button>
+                                <button className="btn-secondary" onClick={onClose}>
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+
 
             // Function to calculate aggregate stats for play group or variation
             const calculatePreviewStars = useCallback((playType, playGroup, variation = null) => {
@@ -1065,13 +1371,27 @@
 
                     const data = snapshot.val();
                     setPlayData(data);
+
+                    if (selectedGame && selectedGame.date !== 'practice') {
+                        const possessionsRef = database.ref(`playcalls/${selectedYear}/games/${selectedGame.date}/possessions`);
+                        const possessionsSnapshot = await possessionsRef.once('value');
+                        if (possessionsSnapshot.exists()) {
+                            const possessions = possessionsSnapshot.val();
+                            const possessionCount = Object.keys(possessions).length;
+                            setPossessionCount(possessionCount + 1); // Set to next possession
+                            console.log(`Loaded ${possessionCount} possessions from Firebase`);
+                        } else {
+                            setPossessionCount(1); // Start at 1 if no possessions yet
+                        }
+                    }
+
                     setLastUpdated(new Date().toLocaleString());
                 } catch (error) {
                     console.error('Error fetching play data:', error);
                 } finally {
                     setLoading(false);
                 }
-            }, [selectedYear]);
+            }, [selectedYear, selectedGame]);
 
             const handleRefresh = async () => {
                 setLoading(true);
@@ -1394,13 +1714,8 @@
 
             return (
                 <div className={`rounded-lg shadow-lg ${darkMode ? 'bg-gray-800 border-2 border-blue-500' : 'bg-white border-2 border-blue-400'} p-5 mb-4`}>
-                    <div className="mb-3">
-                        <div className={`text-xs font-bold tracking-wide ${darkMode ? 'text-blue-400' : 'text-blue-600'}`}>
-                            Selected Play
-                        </div>
-                        <div className={`text-xl font-bold mt-1 ${darkMode ? 'text-white' : 'text-gray-800'}`}>
-                            {selectedPlay.fullName}
-                        </div>
+                    <div className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-800'}`}>
+                        {selectedPlay.fullName}
                     </div>
                     
                     {/*
@@ -1476,49 +1791,54 @@
                     */}
                     
                     <div>
-                        <label className={`block text-sm font-bold mb-3 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                            Select Outcome
-                        </label>
-                        <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                        <div className="grid grid-cols-3 md:grid-cols-5 gap-2">
                             <button onClick={() => logPlayOutcome('+3')} disabled={logging}
-                                className={`px-4 py-6 text-xl rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-green-600`}>
+                                className={`px-3 py-4 text-lg rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-green-600`}>
                                 3PT Made<br/>✓
                             </button>
                             <button onClick={() => logPlayOutcome('+2')} disabled={logging}
-                                className={`px-4 py-6 text-xl rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-green-500`}>
+                                className={`px-3 py-4 text-lg rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-green-500`}>
                                 2PT Made<br/>✓
                             </button>
                             <button onClick={() => logPlayOutcome('-3')} disabled={logging}
-                                className={`px-4 py-6 text-xl rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-red-600`}>
+                                className={`px-3 py-4 text-lg rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-red-600`}>
                                 3PT Miss<br/>✗
                             </button>
                             <button onClick={() => logPlayOutcome('-2')} disabled={logging}
-                                className={`px-4 py-6 text-xl rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-red-500`}>
+                                className={`px-3 py-4 text-lg rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-red-500`}>
                                 2PT Miss<br/>✗
                             </button>
                             <button onClick={() => logPlayOutcome('+3F')} disabled={logging}
-                                className={`px-4 py-6 text-xl rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-green-600`}>
+                                className={`px-3 py-4 text-lg rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-green-600`}>
                                 3PT+Foul<br/>✓
                             </button>
                             <button onClick={() => logPlayOutcome('+2F')} disabled={logging}
-                                className={`px-4 py-6 text-xl rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-green-500`}>
+                                className={`px-3 py-4 text-lg rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-green-500`}>
                                 2PT+Foul<br/>✓
                             </button>
                             <button onClick={() => logPlayOutcome('-3F')} disabled={logging}
-                                className={`px-4 py-6 text-xl rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-red-600`}>
+                                className={`px-3 py-4 text-lg rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-red-600`}>
                                 3PT Miss<br/>+Foul
                             </button>
                             <button onClick={() => logPlayOutcome('-2F')} disabled={logging}
-                                className={`px-4 py-6 text-xl rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-red-500`}>
+                                className={`px-3 py-4 text-lg rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-red-500`}>
                                 2PT Miss<br/>+Foul
                             </button>
                             <button onClick={() => logPlayOutcome('TO')} disabled={logging}
-                                className={`px-4 py-6 text-xl rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-yellow-600`}>
+                                className={`px-3 py-4 text-lg rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-yellow-600`}>
                                 Turnover
                             </button>
                             <button onClick={() => logPlayOutcome('NOTHING')} disabled={logging}
-                                className={`px-4 py-6 text-xl rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} ${darkMode ? 'bg-gray-600' : 'bg-gray-400'}`}>
+                                className={`px-3 py-4 text-lg rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} ${darkMode ? 'bg-gray-600' : 'bg-gray-400'}`}>
                                 Nothing
+                            </button>
+                            <button onClick={() => logPlayOutcome('Foul_Floor')} disabled = {logging}
+                                className={`px-3 py-4 text-lg rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-blue-600`}>
+                                Foul on Floor
+                            </button>
+                            <button onClick={() => logPlayOutcome('Foul_Bonus')} disabled = {logging}
+                                className={`px-3 py-4 text-lg rounded-lg font-bold text-white transtion-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-blue-600`}>
+                                Foul Bonus
                             </button>
                         </div>
                     </div>
@@ -2091,6 +2411,11 @@
                                     onChange={(e) => {
                                         const game = gameSchedule.find(g => g.id === e.target.value);
                                         setSelectedGame(game);
+                                        setManualPossessionAdjustment(0);
+
+                                        if (game) {
+                                            loadPlayData();
+                                        }
                                     }}
                                     className={`px-3 py-2 border rounded-md ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
                                 >
@@ -2102,11 +2427,39 @@
                                     ))}
                                 </select>
 
+                                <button 
+                                    onClick={() => setShowAddPlayModal(true)}
+                                    className={`px-4 py-2 rounded-md transition-colors flex items-center gap-2 ${
+                                        darkMode 
+                                            ? 'bg-purple-600 text-white hover:bg-purple-700'
+                                            : 'bg-purple-500 text-white hover:bg-purple-600'
+                                    }`}
+                                >
+                                    + Add Play
+                                </button>
+
                                 {selectedGame && selectedGame.date !== 'practice' && (
-                                    <div className={`px-3 py-2 rounded-md font-semibold ${
-                                        darkMode ? 'bg-gray-700 text-blue-400' : 'bg-gray-100 text-blue-600'
-                                    }`}>
-                                        Possession #{possessionCount}
+                                    <div className = "possession-counter">
+                                        <span className="possession-label">Possession</span>
+                                        <span className="possession-value">
+                                            {possessionCount + manualPossessionAdjustment}
+                                        </span>
+                                        <div className="possession-controls">
+                                            <button
+                                                className="possession-btn"
+                                                onClick={() => setManualPossessionAdjustment(prev => prev + 1)}
+                                                title="Increase Possession Count"
+                                            >
+                                                +
+                                            </button>
+                                            <button
+                                                className="possession-btn2"
+                                                onClick={() => setManualPossessionAdjustment(prev => Math.max(-possessionCount, prev - 1))}
+                                                title="Decrease Possession Count"
+                                            >
+                                                −
+                                            </button>
+                                        </div>
                                     </div>
                                 )}
                                 
@@ -2165,52 +2518,53 @@
 
                     <UndoBanner />
 
-                    <div className={`rounded-lg shadow-lg ${darkMode ? 'bg-gray-800' : 'bg-white'} p-5 mb-4`}>
-                        <div className="mb-2">
-                            <label className={`block text-sm font-bold mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                                Quick Search
-                            </label>
-                            <input
-                                type="text"
-                                value={globalSearch}
-                                onChange={(e) => setGlobalSearch(e.target.value)}
-                                placeholder="Type to search plays..."
-                                className={`w-full px-4 py-3 text-lg border-2 rounded-lg focus:outline-none ${
-                                    darkMode ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:bg-gray-700 focus:border-blue-500' 
-                                            : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500 focus:bg-white focus:border-blue-500'
-                                }`}
-                            />
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+                        <div className={`rounded-lg shadow-lg ${darkMode ? 'bg-gray-800' : 'bg-white'} p-5`}>
+                            <div className="mb-2">
+                                <label className={`block text-sm font-bold mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                                    Quick Search
+                                </label>
+                                <input
+                                    type="text"
+                                    value={globalSearch}
+                                    onChange={(e) => setGlobalSearch(e.target.value)}
+                                    placeholder="Type to search plays..."
+                                    className={`w-full px-4 py-3 text-lg border-2 rounded-lg focus:outline-none ${
+                                        darkMode ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:bg-gray-700 focus:border-blue-500' 
+                                                : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500 focus:bg-white focus:border-blue-500'
+                                    }`}
+                                />
+                            </div>
+
+                            {globalSearch && filterPlays(globalSearch).length > 0 && (
+                                <div className={`border-2 rounded-lg overflow-hidden mt-2 ${darkMode ? 'border-gray-600' : 'border-gray-300'}`}>
+                                    {filterPlays(globalSearch).map(play => (
+                                        <button
+                                            key={play.id}
+                                            onClick={() => {
+                                                setSelectedPlay(play);
+                                                setGlobalSearch('');
+                                            }}
+                                            className={`w-full text-left px-4 py-2 border-b last:border-b-0 transition-colors ${
+                                                darkMode 
+                                                    ? 'border-gray-600 hover:bg-gray-700 text-white' 
+                                                    : 'border-gray-200 hover:bg-gray-50 text-gray-800'
+                                            }`}
+                                        >
+                                            <div className="font-semibold">{play.fullName}</div>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
                         </div>
 
-                        {globalSearch && filterPlays(globalSearch).length > 0 && (
-                            <div className={`border-2 rounded-lg overflow-hidden mt-2 ${darkMode ? 'border-gray-600' : 'border-gray-300'}`}>
-                                {filterPlays(globalSearch).map(play => (
-                                    <button
-                                        key={play.id}
-                                        onClick={() => {
-                                            setSelectedPlay(play);
-                                            setGlobalSearch('');
-                                        }}
-                                        className={`w-full text-left px-4 py-2 border-b last:border-b-0 transition-colors ${
-                                            darkMode 
-                                                ? 'border-gray-600 hover:bg-gray-700 text-white' 
-                                                : 'border-gray-200 hover:bg-gray-50 text-gray-800'
-                                        }`}
-                                    >
-                                        <div className="font-semibold">{play.fullName}</div>
-                                    </button>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-
-                    {/* New layout for quick log buttons*/}
-                    <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-4">
-                        <div className={`lg:col-span-3 rounded-lg shadow-lg ${darkMode ? 'bg-gray-800' : 'bg-white'} p-5`}>
+                        {/* New layout for quick log buttons*/}
+                    
+                        <div className={`rounded-lg shadow-lg ${darkMode ? 'bg-gray-800' : 'bg-white'} p-5`}>
                             <h3 className={`text-sm font-bold mb-3 tracking-wide ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
                                 Quick Log
                             </h3>
-                            <div className="flex gap-3">
+                            <div className="flex gap-2">
                                 <button
                                     onClick={() => setSelectedPlay({
                                         type: 'transition',
@@ -2218,7 +2572,7 @@
                                         fullName: 'Transition',
                                         displayName: 'Transition',
                                     })}
-                                    className={`flex-1 px-6 py-5 rounded-lg font-bold text-white transition-all ${
+                                    className={`px-6 py-4 rounded-lg font-bold text-white transition-all ${
                                         selectedPlay?.type === 'transition' 
                                             ? 'bg-[#630031] ring-4 ring-[#CF4420] transform scale-105 shadow-lg'
                                             : 'bg-[#630031] hover:bg-[#7a0039] hover:scale-105'
@@ -2233,7 +2587,7 @@
                                         fullName: 'No Play',
                                         displayName: 'No Play',
                                     })}
-                                    className={`flex-1 px-6 py-5 rounded-lg font-bold text-white text-lg transition-all ${
+                                    className={`px-6 py-4 rounded-lg font-bold text-white text-lg transition-all ${
                                         selectedPlay?.type === 'no_play' 
                                             ? 'bg-gray-700 ring-4 ring-gray-400 transform scale-105 shadow-lg'
                                             : 'bg-gray-600 hover:bg-gray-700 hover:scale-105'
@@ -2248,7 +2602,7 @@
                                         fullName: "What's Next",
                                         displayName: "What's Next",
                                     })}
-                                    className={`flex-1 px-6 py-5 rounded-lg font-bold text-white transition-all ${
+                                    className={`px-6 py-4 rounded-lg font-bold text-white transition-all ${
                                         selectedPlay?.type === 'whats_next' 
                                             ? 'bg-[#CF4420] ring-4 ring-[#630031] transform scale-105 shadow-lg'
                                             : 'bg-[#CF4420] hover:bg-[#e05a35] hover:scale-105'
@@ -2258,41 +2612,54 @@
                                 </button>
                             </div>
                         </div>
+                    </div>
 
+                    {recentPlays.length > 0 && (
                         <div className={`rounded-lg shadow-lg ${darkMode ? 'bg-gray-800' : 'bg-white'} p-5`}>
                             <h3 className={`text-sm font-bold mb-3 tracking-wide ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
                                 Recent Plays
                             </h3>
-                            {recentPlays.length > 0 ? (
-                                <div className="overflow-y-auto max-h-[130px] pr-2 scrollbar-thin">
-                                    <div className="flex flex-col gap-2">
-                                        {recentPlays.map(play => (
-                                            <button
-                                                key={play.id}
-                                                onClick={() => setSelectedPlay(play)}
-                                                className={`px-3 py-2 rounded-lg transition-all text-left hover:scale-105 ${
-                                                    darkMode 
-                                                        ? 'bg-gray-700 hover:bg-gray-600 text-white' 
-                                                        : 'bg-gray-100 hover:bg-gray-200 text-gray-800'
-                                                }`}
-                                            >
-                                                <div className="font-semibold text-sm truncate">{play.displayName}</div>
-                                                <div className={`text-xs ${
-                                                    darkMode ? 'text-gray-400' : 'text-gray-600'
-                                                }`}>
-                                                    {play.count}x
-                                                </div>
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className={`text-sm text-center py-8 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
-                                    No recent plays
-                                </div>
-                            )}
+                            <div className="flex gap-3 overflow-x-auto pb-2">
+                                {recentPlays.map(play => {
+                                    const outcomeIcons = {
+                                        '+3': '✓3', '+2': '✓2', '-3': 'Missed 3', '-2': 'Missed 2',
+                                        '+3F': '✓3+F', '+2F': '✓2+F', '-3F': '+3FTs', '-2F': '+2FTs',
+                                        'TO': 'TO', 'NOTHING': '—', 'Foul_Floor': 'F', 'Foul_Bonus': 'F+2'
+                                    };
+
+                                    return(
+                                        <button
+                                            key={play.id}
+                                            onClick={() => setSelectedPlay(play)}
+                                            className={`px-3 py-2 rounded-lg transition-all text-left hover:scale-105 ${
+                                                darkMode 
+                                                    ? 'bg-gray-700 hover:bg-gray-600 text-white' 
+                                                    : 'bg-gray-100 hover:bg-gray-200 text-gray-800'
+                                            }`}
+                                        >
+                                            <div className="font-semibold text-sm truncate">{play.displayName}</div>
+                                            <div className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-600'} flex items-center gap-1`}>
+                                                <span>{play.count}x</span>
+                                                {play.lastOutcome && (
+                                                    <>
+                                                        <span>•</span>
+                                                        <span className={`font-semibold ${
+                                                            play.lastOutcome.startsWith('+') ? 'text-green-500' :
+                                                            play.lastOutcome.startsWith('-') ? 'text-red-500' :
+                                                            'text-yellow-500'
+                                                        }`}>
+                                                            {outcomeIcons[play.lastOutcome] || play.lastOutcome}
+                                                        </span>
+                                                    </>
+                                                )}
+                                            </div>
+                                        </button>
+                                    );
+                                })}
+                            </div>
                         </div>
-                    </div>
+                    )}
+                    
 
                         
 
@@ -2378,6 +2745,20 @@
                     logPlayOutcome={logPlayOutcome}
                     logging={logging}
                     />
+
+                    <FreeThrowModal 
+                        isOpen={showFreeThrowModal}
+                        onClose={() => setShowFreeThrowModal(false)}
+                        onSubmit={handleFreeThrowSubmit}
+                        outcomeType={freeThrowData.outcome}
+                        maxAttempts={freeThrowData.attempts}
+                    />
+
+                    <AddPlayModal
+                        isOpen={showAddPlayModal}
+                        onClose={() => setShowAddPlayModal(false)}
+                    />
+                        
 
                     {/* <PlayTypeOverview /> */}
 
