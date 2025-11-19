@@ -33,7 +33,7 @@
   <div id="root"></div>
 
   <script>
-    // Firebase
+    // Firebase config
     const firebaseConfig = {
       apiKey: "AIzaSyDmUDcy18ZWk_EgOSlLsk9CgzQaKVxcfG4",
       authDomain: "vtmbb-playcalls.firebaseapp.com",
@@ -50,33 +50,48 @@
   <script type="text/babel">
     const {useState,useEffect,useMemo,useRef,useCallback} = React;
 
-    const letters="ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-    const L=(i)=>letters[i]||`X${i+1}`;
-    const N2=(i)=>(i+1).toString().padStart(2,'0');
+    // Outcomes for heatmap display
+    const OUTCOME_KEYS = [
+      '+3', '+2', '-2', '-3',
+      '+3F', '+2F', '-2F', '-3F',
+      'NOTHING', 'TO', 'FOF'
+    ];
 
     function App(){
+      // THEME
       const [dark,setDark]=useState(true);
       useEffect(()=>{document.body.className=dark?'dark-mode':'light-mode';},[dark]);
 
+      // DATA SCOPE
       const [season,setSeason]=useState('2025');
       const [playData,setPlayData]=useState(null);
       const [loading,setLoading]=useState(true);
       const [updated,setUpdated]=useState(null);
 
-      // Single search box + selected play
-      const [query,setQuery]=useState('');
-      const [selected,setSelected]=useState(null); //
+      // SEARCH + SELECTION
+      const [seriesQuery,setSeriesQuery]=useState('');                     // CHANGE: series-only search text
+      const [selectedSeries,setSelectedSeries]=useState(null);             // CHANGE: selected series name (e.g., "Alpha")
+      const [selectedPlay,setSelectedPlay]=useState(null);                 // CHANGE: selected play object {series, playNumber}
 
-      // charts
+      // TABLE SORT
+      const [topSortByN,setTopSortByN]=useState(true);                     // CHANGE: allow clicking "Times Called" to sort Top 3
+      const [botSortByN,setBotSortByN]=useState(true);                     // CHANGE: allow clicking "Times Called" to sort Bottom 3
+
+      // MODE
+      const [postGameMode, setPostGameMode] = useState(false);
+
+      // CHARTS
       const donutRef=useRef(null), donutInst=useRef(null);
       const barRef=useRef(null), barInst=useRef(null);
 
+      // Scatter chart (Usage vs Success)
+      const scatterRef = useRef(null);
+      const scatterInst = useRef(null);
+
+      // Load from Firebase (live listener)
       const load=useCallback(()=>{
         setLoading(true);
-        setSelected(null);
-
         const dbRef= database.ref(`playcalls/${season}/stats/series`);
-        // Updated to update in realtime
         const listener = dbRef.on('value', (snap) => {
           setPlayData(snap.exists() ? snap.val() : null);
           setUpdated(new Date().toLocaleString());
@@ -85,159 +100,218 @@
           console.error("Error: ", error);
           setLoading(false);
         });
-
         return () => {dbRef.off('value', listener);};
       },[season]);
 
-      useEffect(()=>{
-        const cleanup=load();
-        return cleanup;
-      },[load]);
+      useEffect(()=>load(),[load]);
 
-      // Types present
-      const typeKeys=useMemo(()=> playData?Object.keys(playData).sort():[],[playData]);
+      // SERIES LIST
+      const allSeries=useMemo(()=> playData?Object.keys(playData).sort():[],[playData]);
 
-      // Index every play across all types, for fast search/ranks
-      const indexAll=useMemo(()=>{
+      // Build flat index for stats and counts
+      const flat=useMemo(()=>{
         if(!playData) return [];
-        const rows=[];
-
-        // Changed through series/plays instead of types/groups
-        typeKeys.forEach((seriesName)=>{
-          const playsInSeries=playData[seriesName]||{};
-          Object.keys(playsInSeries).forEach(playNumber=>{
-            const s=playsInSeries[playNumber]||{};
-            const n=parseInt(s.numCalls||s.NumCalls)||0;
+        const out=[];
+        Object.keys(playData).forEach(series=>{
+          const plays=playData[series]||{};
+          Object.keys(plays).forEach(num=>{
+            const s=plays[num]||{};
+            const n=parseInt(s.NumCalls||s.numCalls)||0;
             if(n<=0) return;
-            
             const pts=(+s['+2']||0)*2+(+s['+3']||0)*3+(+s['+2F']||0)*2+(+s['+3F']||0)*3;
             const ppp=n?pts/n:0;
-            const label=`${seriesName} ${playNumber}`;   // e.g., "Alpha 1"
-            
-            rows.push({
-              label,
-              n,
-              ppp,
-              series: seriesName,     
-              playNumber: playNumber, 
-              type: seriesName
-            });
+            out.push({series,playNumber:num,n,ppp,stats:s});
           });
         });
-        return rows;
-      },[playData,typeKeys]);
+        return out;
+      },[playData]);
 
-      // Infer "current type" from the query or selected play (so rankings stay in-type)
-      const inferredTypeKey=useMemo(()=>{
-        
+      // Suggest series by N (frequency)
+      const seriesCounts=useMemo(()=>{
+        const map={};
+        flat.forEach(r=>{ map[r.series]=(map[r.series]||0)+r.n; });
+        return map;
+      },[flat]);
 
-        // Updated to match series names
-        const m=query.match(/\b(alpha|bravo|charlie|delta|echo|foxtrot|golf|hotel|india|juliet|kilo|lima|mike|november|oscar)\b/i);
-        if(m){
-          const seriesName=m[1].charAt(0).toUpperCase() + m[1].slice(1).toLowerCase();
-          if(typeKeys.includes(seriesName)) return seriesName;
+      const seriesSuggestions=useMemo(()=>{
+        const q=seriesQuery.trim().toLowerCase();
+        const pool=allSeries.map(s=>({series:s,total:(seriesCounts[s]||0)}));
+        const filtered=q?pool.filter(x=>x.series.toLowerCase().includes(q)):pool;
+        // CHANGE: show only first 3 rows, rest scrollable via CSS; we still compute all for height control
+        return filtered.sort((a,b)=> b.total-a.total || a.series.localeCompare(b.series));
+      },[seriesQuery,allSeries,seriesCounts]);
+
+      // TOP/BOTTOM 3 within selected series (or global if none chosen)
+      const scopeRows=useMemo(()=>{
+        const pool = selectedSeries ? flat.filter(r=>r.series===selectedSeries) : flat;
+        return pool;
+      },[flat,selectedSeries]);
+
+      const top3=useMemo(()=>{
+        const rows=[...scopeRows].sort((a,b)=> b.ppp-a.ppp || b.n-a.n).slice(0,3);
+        // allow Times Called sorting toggle (still keeps only these 3)
+        return topSortByN ? [...rows].sort((a,b)=> b.n-a.n || b.ppp-a.ppp) : rows;
+      },[scopeRows,topSortByN]);
+
+      const bottom3=useMemo(()=>{
+        const rows=[...scopeRows].sort((a,b)=> a.ppp-b.ppp || b.n-a.n).slice(0,3);
+        return botSortByN ? [...rows].sort((a,b)=> b.n-a.n || a.ppp-b.ppp) : rows;
+      },[scopeRows,botSortByN]);
+
+      // DETAIL CARD: either aggregate for series, or specific play
+      const detailStats=useMemo(()=>{
+        if(!selectedSeries) return null;
+        if(selectedPlay && selectedPlay.series===selectedSeries){
+          return playData?.[selectedSeries]?.[selectedPlay.playNumber] || null;
         }
-        return null; // show global if unknown
-      },[query,typeKeys]);
+        // Aggregate all plays in series
+        const playsInSeries=playData?.[selectedSeries]||{};
+        const agg={NumCalls:0,'+2':0,'+3':0,'+2F':0,'+3F':0,'-2':0,'-3':0,'-2F':0,'-3F':0,'NOTHING':0,'TO':0,FOF:0};
+        Object.keys(playsInSeries).forEach(num=>{
+          const s=playsInSeries[num]||{};
+          const n=parseInt(s.NumCalls||s.numCalls)||0;
+          agg.NumCalls+=n;
+          ['+2','+3','+2F','+3F','-2','-3','-2F','-3F','NOTHING','TO'].forEach(k=> agg[k]+= (+s[k]||0) );
+          agg.FOF+= (+s['+2F']||0)+(+s['+3F']||0)+(+s['-2F']||0)+(+s['-3F']||0);
+        });
+        return agg;
+      },[selectedSeries,selectedPlay,playData]);
 
-      // Suggestions as user types: rank by N (frequency)
-      const suggestions=useMemo(()=>{
-        const q=query.trim().toLowerCase();
+      // Heatmap data for entire series (only if series selected, no play selected)
+      const seriesHeatmap = useMemo(() => {
+        if (!selectedSeries || selectedPlay) return null;
+        if (!playData) return null;
 
-        const seriesMatch = q.match(/^(alpha|bravo|charlie|delta|echo|foxtrot|golf|hotel|india|juliet|kilo|lima|mike|november|oscar)$/i);
-        
-        if (seriesMatch && inferredTypeKey && typeKeys.includes(inferredTypeKey)) {
-          const seriesPlays = indexAll.filter(p => p.type === inferredTypeKey);
-          return [...seriesPlays].sort((a, b) => b.n - a.n || a.label.localeCompare(b.label)).slice(0, 15);
-        }
-        
-        const pool=inferredTypeKey
-          ? indexAll.filter(p=>p.type===inferredTypeKey)
-          : indexAll;
-        const filtered=q?pool.filter(p=>p.label.toLowerCase().includes(q)):pool;
-        return [...filtered].sort((a,b)=> b.n-a.n || a.label.localeCompare(b.label)).slice(0,8);
-      },[query,indexAll,inferredTypeKey, typeKeys]);
+        const plays = playData[selectedSeries];
+        if (!plays) return null;
 
-      // Top/Bottom 5 PPP, filtered to inferred type if available
-      const ranks=useMemo(()=>{
-        const pool=inferredTypeKey
-          ? indexAll.filter(p=>p.type===inferredTypeKey)
-          : indexAll;
-        const top=[...pool].sort((a,b)=> b.ppp-a.ppp).slice(0,5);
-        const bottom=[...pool].sort((a,b)=> a.ppp-b.ppp).slice(0,5);
-        return {top,bottom};
-      },[indexAll,inferredTypeKey]);
-
-      // Stats for selected play -> detail + charts
-      const stats=useMemo(()=>{
-        if(!selected || !playData) return null;
-
-        // If only series, aggregate all plays in that series
-        if(selected.isSeries){
-          const playsInSeries=playData[selected.series]||{};
-          const agg={
-            numCalls:0, NumCalls:0,
-            '+2':0,'+3':0, '+2F':0,'+3F':0,
-            '-2':0,'-3':0, '-2F':0,'-3F':0,
-            'NOTHING':0, 'TO':0, 'FOF':0
+        return Object.keys(plays).map(playNumber => {
+          const s = plays[playNumber] || {};
+          return {
+            label: `${selectedSeries} ${playNumber}`,
+            data: OUTCOME_KEYS.map(k => +s[k] || 0)
           };
+        });
+      }, [selectedSeries, selectedPlay, playData]);
 
-          Object.keys(playsInSeries).forEach(playNumber=>{
-            const s=playsInSeries[playNumber]||{};
-            agg.numCalls+=parseInt(s.numCalls||s.NumCalls)||0;
-            agg.NumCalls+=parseInt(s.NumCalls||s.numCalls)||0;
-            ['+2','+3','+2F','+3F','-2','-3','-2F','-3F','NOTHING','TO','FOF'].forEach(key=>{
-              agg[key]+=(+s[key]||0);
-            });
-          });
-          return agg;
-        }
+      // Usage vs Success scatter data (for selected series, only when no play selected)
+      const seriesScatter = useMemo(() => {
+        if (!selectedSeries || selectedPlay) return null;
+        if (!playData) return null;
 
-        // Changed access by series instead of type/group/v
-        return playData[selected.series]?.[selected.playNumber] || null;
-      },[selected,playData]);
+        const plays = playData[selectedSeries];
+        if (!plays) return null;
 
-      // Header numbers
+        return Object.keys(plays).map(playNumber => {
+          const s = plays[playNumber] || {};
+          const n = parseInt(s.NumCalls || s.numCalls) || 0;
+
+          const points =
+            (+s["+2"] || 0) * 2 +
+            (+s["+3"] || 0) * 3 +
+            (+s["+2F"] || 0) * 2 +
+            (+s["+3F"] || 0) * 3;
+
+          const ppp = n ? points / n : 0;
+
+          return {
+            label: `${selectedSeries} ${playNumber}`,
+            x: n,
+            y: ppp
+          };
+        });
+      }, [selectedSeries, selectedPlay, playData]);
+
       const header=useMemo(()=>{
-        if(!stats) return null;
-        const n=parseInt(stats.numCalls||stats.NumCalls)||1;
-        const pts=(+stats['+2']||0)*2+(+stats['+3']||0)*3+(+stats['+2F']||0)*2+(+stats['+3F']||0)*3;
+        if(!detailStats) return null;
+        const n=parseInt(detailStats.NumCalls)||1;
+        const pts=(+detailStats['+2']||0)*2+(+detailStats['+3']||0)*3+(+detailStats['+2F']||0)*2+(+detailStats['+3F']||0)*3;
         const ppp=n?pts/n:0;
-        const made=['+2','+3','+2F','+3F'].reduce((s,k)=>s+(+stats[k]||0),0);
+        const made=['+2','+3','+2F','+3F'].reduce((s,k)=>s+(+detailStats[k]||0),0);
         const fg=n?(made/n)*100:0;
-        return {n,ppp,fg,fof:stats.FOF||0};
-      },[stats]);
+        return {n,ppp,fg,fof:detailStats.FOF||0};
+      },[detailStats]);
+
+      // Scatterplot: Usage (N) vs Success (PPP)
+      useEffect(() => {
+        if (!seriesScatter || !scatterRef.current) return;
+
+        if (scatterInst.current) scatterInst.current.destroy();
+
+        scatterInst.current = new Chart(scatterRef.current.getContext("2d"), {
+          type: "scatter",
+          data: {
+            datasets: [
+              {
+                label: "Plays",
+                data: seriesScatter.map(p => ({ x: p.x, y: p.y })),
+                backgroundColor: "#3B82F6",
+                borderColor: "#2563EB",
+                pointRadius: 6,
+                pointHoverRadius: 8
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label: (ctx) => {
+                    const p = seriesScatter[ctx.dataIndex];
+                    return `${p.label}: N=${p.x}, PPP=${p.y.toFixed(2)}`;
+                  }
+                }
+              }
+            },
+            scales: {
+              x: {
+                title: { display: true, text: "Times Called (N)", color: dark ? "#f9fafb" : "#111827" },
+                ticks: { color: dark ? "#9CA3AF" : "#374151" },
+                grid: { color: dark ? "#374151" : "#E5E7EB" }
+              },
+              y: {
+                title: { display: true, text: "Points per Play (PPP)", color: dark ? "#f9fafb" : "#111827" },
+                ticks: { color: dark ? "#9CA3AF" : "#374151" },
+                grid: { color: dark ? "#374151" : "#E5E7EB" },
+                beginAtZero: true
+              }
+            }
+          }
+        });
+      }, [seriesScatter, dark, postGameMode]);
 
       // Charts
       useEffect(()=>{
-        if(!stats || !donutRef.current) return;
+        if(!detailStats || !donutRef.current) return;
         if(donutInst.current) donutInst.current.destroy();
-        const total=parseInt(stats.NumCalls)||1;
-        const made=['+2','+3','+2F','+3F'].reduce((s,k)=>s+(+stats[k]||0),0);
-        const missTo=['-2','-3','-2F','-3F'].reduce((s,k)=>s+(+stats[k]||0),0);
-        const nothing=+stats.NOTHING||0;
-        const to=+stats.TO||0;
+        const total=parseInt(detailStats.NumCalls)||1;
+        const made=['+2','+3','+2F','+3F'].reduce((s,k)=>s+(+detailStats[k]||0),0);
+        const missTo=['-2','-3','-2F','-3F'].reduce((s,k)=>s+(+detailStats[k]||0),0);
+        const nothing=+detailStats.NOTHING||0;
+        const to=+detailStats.TO||0;
         donutInst.current=new Chart(donutRef.current.getContext('2d'),{
           type:'doughnut',
           data:{labels:['Made FG','Miss/TO','Nothing','Turnover'],
-                datasets:[{data:[made,missTo,nothing,to].map(x=>x/total*100),
+                datasets:[{data:[made,missTo,nothing,to],
                            backgroundColor:['#10B981','#EF4444','#6B7280','#F59E0B']}]},
           options:{responsive:true,maintainAspectRatio:false,
-            plugins:{legend:{position:'bottom',labels:{color:dark?'#fff':'#374151',padding:12}},
-                     tooltip:{callbacks:{label:(c)=>`${c.label}: ${c.parsed.toFixed(1)}%`}}}}
+            plugins:{legend:{position:'bottom',labels:{color:dark?'#fff':'#374151',padding:12}}}}
         });
-      },[stats,dark]);
+      },[detailStats,dark]);
 
       useEffect(()=>{
-        if(!stats || !barRef.current) return;
+        if(!detailStats || !barRef.current) return;
         if(barInst.current) barInst.current.destroy();
         const vals=[
-          +stats['+3']||0,
-          +stats['+2']||0,
-          (+stats['-2']||0)+(+stats['-3']||0),
-          +stats['+3F']||0,
-          +stats['+2F']||0,
-          (+stats['-2F']||0)+(+stats['-3F']||0)
+          +detailStats['+3']||0,
+          +detailStats['+2']||0,
+          (+detailStats['-2']||0)+(+detailStats['-3']||0),
+          +detailStats['+3F']||0,
+          +detailStats['+2F']||0,
+          (+detailStats['-2F']||0)+(+detailStats['-3F']||0)
         ];
         barInst.current=new Chart(barRef.current.getContext('2d'),{
           type:'bar',
@@ -248,65 +322,56 @@
                     x:{ticks:{color:dark?'#9CA3AF':'#6B7280'},grid:{color:dark?'#374151':'#E5E7EB'}}},
             plugins:{legend:{display:false}}}
         });
-      },[stats,dark]);
+      },[detailStats,dark]);
 
-      // Handling Suggestions and Selection
-      const handleSuggestionClick=(suggestion)=>{
-        const q=query.trim().toLowerCase();
-        const seriesMatch=q.match(/^(alpha|bravo|charlie|delta|echo|foxtrot|golf|hotel|india|juliet|kilo|lima|mike|november|oscar)$/i);
+      // Helpers
+      const playLabel = (r)=> `${r.series} ${r.playNumber}`;               // CHANGE: no dashes anywhere
 
-        if (seriesMatch){
-          setSelected({
-            label: suggestion.series,
-            isSeries: true,
-            series: suggestion.series
-          });
-          setQuery(suggestion.series);
-        } else {
-          setSelected(suggestion);
-          setQuery(suggestion.label);
-        }
+      const clickPlayRow=(r)=>{
+        // CHANGE: keep current series context; only set play within that series
+        setSelectedSeries(r.series);
+        setSelectedPlay({series:r.series,playNumber:r.playNumber});
       };
 
-      const handleSearchKeyDown=(e)=>{
-        if(e.key==='Enter'){
-          const q=query.trim().toLowerCase();
-          const seriesMatch=q.match(/^(alpha|bravo|charlie|delta|echo|foxtrot|golf|hotel|india|juliet|kilo|lima|mike|november|oscar)$/i);
-
-          if (seriesMatch && inferredTypeKey){
-            setSelected({
-              label: inferredTypeKey,
-              isSeries: true,
-              series: inferredTypeKey
-            });
-          } else if(suggestions.length>0){
-            handleSuggestionClick(suggestions[0]);
-          }
-        }
+      const clearDetail=()=>{
+        setSelectedPlay(null);
+        setSelectedSeries(null);
       };
 
       return (
         <div className="max-w-7xl mx-auto p-4">
-          {/* Header */}
+          {/* ===== HEADER with Live pill restored ===== */}
           <div className={`rounded-lg shadow p-4 mb-6 ${dark?'bg-gray-800':'bg-white'}`}>
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
               <div className="flex items-center gap-3">
                 <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/6/60/Virginia_Tech_Hokies_logo.svg/2560px-Virginia_Tech_Hokies_logo.svg.png" alt="VT" className="h-12"/>
                 <h1 className="text-2xl font-bold">Sideline Analytics</h1>
               </div>
-              <div className="flex gap-2">
+              <div className="flex items-center gap-2">
                 <select value={season} onChange={(e)=>setSeason(e.target.value)}
                         className={`selectlike px-3 py-2 rounded border ${dark?'bg-gray-700 border-gray-600 text-white':'bg-white border-gray-300'}`}>
                   <option value="2024">Season 2024</option>
                   <option value="2025">Season 2025</option>
                 </select>
-                <button onClick={()=>setUpdated(new Date().toLocaleString())}
-                        className={`px-3 py-2 rounded flex items-center gap-2 ${dark?'bg-green-600 text-white hover:bg-green-700':'bg-green-500 text-white hover:bg-green-600'}`}>
-                        <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
-                        Live
-                        </button>
+                {/* CHANGE: Live pill (visual) */}
+                <button type="button" className="flex items-center gap-2 px-3 py-2 rounded text-white bg-green-600 hover:bg-green-700 shadow">
+                  <span className="w-2 h-2 rounded-full bg-green-300 animate-pulse" />
+                  Live
+                </button>
                 <button onClick={()=>setDark(d=>!d)}
                         className={`px-3 py-2 rounded ${dark?'bg-gray-700 text-white hover:bg-gray-600':'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>{dark?'☀️ Light':'🌙 Dark'}</button>
+                <button
+                  onClick={() => setPostGameMode(m => !m)}
+                  className={`px-3 py-2 rounded shadow ${
+                    postGameMode
+                      ? 'bg-blue-600 text-white hover:bg-blue-700'
+                      : dark
+                        ? 'bg-gray-700 text-white hover:bg-gray-600'
+                        : 'bg-gray-200 text-gray-900 hover:bg-gray-300'
+                  }`}
+                >
+                  {setPostGameMode ? 'Post-Game Mode' : 'In-Game Mode'}
+                </button>
               </div>
             </div>
             {updated && (
@@ -317,7 +382,7 @@
             )}
           </div>
 
-          {/* Loading */}
+          {/* Loading skeleton */}
           {loading && (
             <div className="animate-pulse space-y-4">
               <div className="h-16 bg-gray-300 rounded"></div>
@@ -328,51 +393,56 @@
 
           {!loading && (
             <>
-              {/* Search only (no play-type bar). Suggestions ranked by N. */}
+              {/* ===== Series-only Search ===== */}
               <div className={`rounded-lg shadow p-4 mb-4 ${dark?'bg-gray-800':'bg-white'}`}>
-                <label className="text-sm block mb-1">Search playcall (e.g., <span className="opacity-80">Alpha 1</span> or <span className="opacity-80">November</span>)</label>
+                <label className="text-sm block mb-1">Search series (e.g., <span className="opacity-80">Alpha</span> or <span className="opacity-80">November</span>)</label>
                 <input
                   type="text"
-                  value={query}
-                  onChange={(e)=>{ setQuery(e.target.value); /* do not clear selected so charts can stay */ }}
-                  onKeyDown={handleSearchKeyDown}
+                  value={seriesQuery}
+                  onChange={(e)=>{ setSeriesQuery(e.target.value); }}
                   placeholder="Start typing…"
                   className={`w-full px-3 py-2 rounded border ${dark?'bg-gray-700 border-gray-600 text-white placeholder-gray-400':'bg-white border-gray-300'}`}
                 />
-                {/* suggestions */}
-                <div className={`mt-2 rounded-lg border ${dark?'border-gray-700':'border-gray-300'}`}>
-                  {suggestions.length===0 && (
+                {/* CHANGE: dropdown shows only series names, first 3 visible then scrollable */}
+                <div className={`mt-2 rounded-lg border ${dark?'border-gray-700':'border-gray-300'} max-h-40 overflow-y-auto`}>
+                  {seriesSuggestions.length===0 && (
                     <div className={`px-3 py-2 text-sm ${dark?'text-gray-300':'text-gray-600'}`}>No matches.</div>
                   )}
-                  {suggestions.map((s,idx)=>(
+                  {seriesSuggestions.map((s,idx)=>(
                     <div key={idx}
                       className={`suggestion px-3 py-2 flex items-center justify-between ${dark?'hover:bg-gray-800':'hover:bg-gray-100'}`}
-                      onClick={()=>{ setSelected(s); setQuery(s.label); }}>
-                      <div className="font-medium">{s.label}</div>
-                      <div className="text-xs opacity-75">N={s.n} • {s.ppp.toFixed(2)} ppp</div>
+                      onClick={()=>{ setSelectedSeries(s.series); setSelectedPlay(null); setSeriesQuery(s.series); }}>
+                      <div className="font-medium">{s.series}</div>
+                      <div className="text-xs opacity-75">N={s.total}</div>
                     </div>
                   ))}
                 </div>
               </div>
 
-              {/* Dynamic Top/Bottom 5 PPP — auto-filtered by inferred type from the current query/selection */}
+              {/* ===== Top/Bottom 3 tables ===== */}
               <div className="grid lg:grid-cols-2 gap-4 mb-6">
                 <div className={`rounded-lg shadow p-4 ${dark?'bg-gray-800':'bg-white'}`}>
                   <div className="flex items-center justify-between mb-2">
-                    <h2 className="text-lg font-bold">Top 5 by Points/Play</h2>
-                    <span className="text-xs opacity-70">{inferredTypeKey ? inferredTypeKey : 'All Series'}</span>
+                    <h2 className="text-lg font-bold">Top 3 by Points/Play</h2>
+                    <span className="text-xs opacity-70">{selectedSeries ?? 'All Series'}</span>
                   </div>
                   <table className="tbl w-full">
                     <thead className={`${dark?'bg-gray-900 text-gray-200':'bg-gray-100 text-gray-700'}`}>
-                      <tr><th className="text-left">Play</th><th className="text-right">Times Called</th><th className="text-right">Pts/Play</th></tr>
+                      <tr>
+                        <th className="text-left">Play</th>
+                        {/* CHANGE: center-align numbers; make header clickable to toggle sort */}
+                        <th className="text-center cursor-pointer select-none" onClick={()=>setTopSortByN(v=>!v)}>
+                          Times Called {topSortByN? '▾':'▴'}
+                        </th>
+                        <th className="text-right">Pts/Play</th>
+                      </tr>
                     </thead>
                     <tbody>
-                      {ranks.top.length===0 && (<tr><td colSpan="3" className="py-3 text-sm opacity-70">No plays.</td></tr>)}
-                      {ranks.top.map((r,i)=>(
-                        <tr key={`t-${i}`} className={`${dark?'hover:bg-gray-800':'hover:bg-gray-100'} cursor-pointer`}
-                            onClick={()=>{ setSelected(r); setQuery(r.label); }}>
-                          <td className="font-medium">{r.label}</td>
-                          <td className="text-right">{r.n}</td>
+                      {top3.length===0 && (<tr><td colSpan="3" className="py-3 text-sm opacity-70">No plays.</td></tr>)}
+                      {top3.map((r,i)=>(
+                        <tr key={`t-${i}`} className={`${dark?'hover:bg-gray-800':'hover:bg-gray-100'} cursor-pointer`} onClick={()=>clickPlayRow(r)}>
+                          <td className="font-medium">{playLabel(r)}</td>
+                          <td className="text-center">{r.n}</td>
                           <td className="text-right font-semibold text-green-400">{r.ppp.toFixed(2)}</td>
                         </tr>
                       ))}
@@ -382,20 +452,26 @@
 
                 <div className={`rounded-lg shadow p-4 ${dark?'bg-gray-800':'bg-white'}`}>
                   <div className="flex items-center justify-between mb-2">
-                    <h2 className="text-lg font-bold">Bottom 5 by Points/Play</h2>
-                    <span className="text-xs opacity-70">{inferredTypeKey ? inferredTypeKey : 'All Series'}</span>
+                    <h2 className="text-lg font-bold">Bottom 3 by Points/Play</h2>
+                    <span className="text-xs opacity-70">{selectedSeries ?? 'All Series'}</span>
                   </div>
                   <table className="tbl w-full">
                     <thead className={`${dark?'bg-gray-900 text-gray-200':'bg-gray-100 text-gray-700'}`}>
-                      <tr><th className="text-left">Play</th><th className="text-right">Times Called</th><th className="text-right">Pts/Play</th></tr>
+                      <tr>
+                        <th className="text-left">Play</th>
+                        {/* CHANGE: center-align numbers; header toggles sort */}
+                        <th className="text-center cursor-pointer select-none" onClick={()=>setBotSortByN(v=>!v)}>
+                          Times Called {botSortByN? '▾':'▴'}
+                        </th>
+                        <th className="text-right">Pts/Play</th>
+                      </tr>
                     </thead>
                     <tbody>
-                      {ranks.bottom.length===0 && (<tr><td colSpan="3" className="py-3 text-sm opacity-70">No plays.</td></tr>)}
-                      {ranks.bottom.map((r,i)=>(
-                        <tr key={`b-${i}`} className={`${dark?'hover:bg-gray-800':'hover:bg-gray-100'} cursor-pointer`}
-                            onClick={()=>{ setSelected(r); setQuery(r.label); }}>
-                          <td className="font-medium">{r.label}</td>
-                          <td className="text-right">{r.n}</td>
+                      {bottom3.length===0 && (<tr><td colSpan="3" className="py-3 text-sm opacity-70">No plays.</td></tr>)}
+                      {bottom3.map((r,i)=>(
+                        <tr key={`b-${i}`} className={`${dark?'hover:bg-gray-800':'hover:bg-gray-100'} cursor-pointer`} onClick={()=>clickPlayRow(r)}>
+                          <td className="font-medium">{playLabel(r)}</td>
+                          <td className="text-center">{r.n}</td>
                           <td className="text-right font-semibold text-red-400">{r.ppp.toFixed(2)}</td>
                         </tr>
                       ))}
@@ -404,12 +480,79 @@
                 </div>
               </div>
 
-              {/* Detail + charts for the currently selected play */}
-              {selected && stats && header && (
+              {/* Series Heatmap (shown only when a series is selected AND no play is selected) */}
+              {postGameMode && selectedSeries && !selectedPlay && seriesHeatmap && (
+                <div className={`rounded-lg shadow p-6 mb-6 ${dark ? 'bg-gray-800' : 'bg-white'}`}>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-bold">Outcome Heatmap — {selectedSeries}</h3>
+                    <span className="text-xs opacity-70">
+                      {seriesHeatmap.length} plays
+                    </span>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="tbl w-full">
+                      <thead className={`${dark ? 'bg-gray-900 text-gray-200' : 'bg-gray-100 text-gray-700'}`}>
+                        <tr>
+                          <th className="text-left">Play</th>
+                          {OUTCOME_KEYS.map(k => (
+                            <th key={k} className="text-center">{k}</th>
+                          ))}
+                        </tr>
+                      </thead>
+
+                      <tbody>
+                        {seriesHeatmap.map((row, i) => (
+                          <tr key={i} className={`${dark ? 'hover:bg-gray-800' : 'hover:bg-gray-100'}`}>
+                            <td className="font-medium">{row.label}</td>
+
+                            {row.data.map((val, j) => {
+                              const intensity = Math.min(1, val / 5);
+                              const bg = `rgba(59,130,246,${intensity})`;
+
+                              return (
+                                <td
+                                  key={j}
+                                  className="text-center rounded"
+                                  style={{
+                                    backgroundColor: bg,
+                                    color: intensity > 0.5 ? 'white' : (dark ? '#f9fafb' : '#111827'),
+                                    fontWeight: '500',
+                                    padding: '.5rem'
+                                  }}
+                                >
+                                  {val}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Usage vs Success Scatterplot (series selected, no play selected) */}
+              {postGameMode && selectedSeries && !selectedPlay && seriesScatter && (
+                <div className={`rounded-lg shadow p-6 mb-6 ${dark ? 'bg-gray-800' : 'bg-white'}`}>
+                  <h3 className="text-lg font-bold mb-4">Usage vs Success — {selectedSeries}</h3>
+
+                  <div style={{ height: "320px" }}>
+                    <canvas ref={scatterRef}></canvas>
+                  </div>
+                </div>
+              )}
+
+              {/* ===== Detail card ===== */}
+              {(selectedSeries && detailStats && header) && (
                 <div className={`rounded-lg shadow p-6 ${dark?'bg-gray-800':'bg-white'}`}>
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-bold">{selected.label}{selected.isSeries && ' (All Plays)'}</h3>
-                    <button className={`pill ${dark?'bg-gray-700':'bg-gray-200'}`} onClick={()=>setSelected(null)}>Clear</button>
+                    {/* CHANGE: Title shows either "Alpha 7" or "Alpha" (no dashes, no '(All Plays)') */}
+                    <h3 className="text-lg font-bold">
+                      {selectedPlay ? `${selectedSeries} ${selectedPlay.playNumber}` : `${selectedSeries}`}
+                    </h3>
+                    <button className={`pill ${dark?'bg-gray-700':'bg-gray-200'}`} onClick={clearDetail}>Clear</button>
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                     <div>
@@ -418,6 +561,7 @@
                     </div>
                     <div>
                       <div className="text-sm opacity-75">Times Called</div>
+                      {/* CHANGE: center in table already; here we keep big number */}
                       <div className="text-2xl font-bold">{header.n}</div>
                     </div>
                     <div>

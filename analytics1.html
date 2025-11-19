@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>VT Men's Basketball — Sideline Analytics</title>
+
+  <!-- React + Babel -->
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- Tailwind + Chart.js -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- Firebase (compat) -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+
+  <style>
+    html,body{height:100%;margin:0}
+    .dark-mode{background:#111827 !important;color:#f9fafb}
+    .light-mode{background:#f9fafb !important;color:#111827}
+    .selectlike{appearance:none;background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%);background-position:calc(100% - 18px) calc(50% - 3px),calc(100% - 12px) calc(50% - 3px);background-size:6px 6px,6px 6px;background-repeat:no-repeat}
+    .tbl th{font-weight:700}
+    .tbl th,.tbl td{padding:.6rem .75rem;white-space:nowrap}
+    .pill{padding:.4rem .6rem;border-radius:.5rem}
+    /* CHANGE: limit suggestions to ~3 rows then scroll */
+    .suggestions-pane{
+      max-height: 8.5rem; /* ~3 items */
+      overflow-y: auto;
+      border-radius: .5rem;
+    }
+  </style>
+</head>
+<body class="dark-mode">
+  <div id="root"></div>
+
+  <script>
+    // Firebase
+    const firebaseConfig = {
+      apiKey: "AIzaSyDmUDcy18ZWk_EgOSlLsk9CgzQaKVxcfG4",
+      authDomain: "vtmbb-playcalls.firebaseapp.com",
+      databaseURL: "https://vtmbb-playcalls-default-rtdb.firebaseio.com",
+      projectId: "vtmbb-playcalls",
+      storageBucket: "vtmbb-playcalls.firebasestorage.app",
+      messagingSenderId: "329877987847",
+      appId: "1:329877987847:web:d4d33227dc39624ae100a2",
+    };
+    firebase.initializeApp(firebaseConfig);
+    const database = firebase.database();
+  </script>
+
+  <script type="text/babel">
+    const {useState,useEffect,useMemo,useRef,useCallback} = React;
+
+    function App(){
+      const [dark,setDark]=useState(true);
+      useEffect(()=>{document.body.className=dark?'dark-mode':'light-mode';},[dark]);
+
+      const [season,setSeason]=useState('2025');
+      const [playData,setPlayData]=useState(null);
+      const [loading,setLoading]=useState(true);
+      const [updated,setUpdated]=useState(null);
+
+      // Search & selection
+      const [query,setQuery]=useState('');
+      const [selected,setSelected]=useState(null); // {isSeries, series} or {series, playNumber}
+      // CHANGE: ranking sort mode: 'ppp' (default) or 'n' (Times Called)
+      const [rankSortMode,setRankSortMode]=useState('ppp');
+
+      // Charts
+      const donutRef=useRef(null), donutInst=useRef(null);
+      const barRef=useRef(null), barInst=useRef(null);
+
+      // Live load (realtime listener)
+      const load=useCallback(()=>{
+        setLoading(true);
+        const dbRef= database.ref(`playcalls/${season}/stats/series`);
+        const listener = dbRef.on('value', (snap) => {
+          setPlayData(snap.exists()? snap.val(): null);
+          setUpdated(new Date().toLocaleString());
+          setLoading(false);
+        }, (error) => {
+          console.error("Error: ", error);
+          setLoading(false);
+        });
+        return ()=> dbRef.off('value', listener);
+      },[season]);
+
+      useEffect(()=> load(),[load]);
+
+      // Unique series list
+      const seriesList = useMemo(()=>{
+        if(!playData) return [];
+        return Object.keys(playData).sort();
+      },[playData]);
+
+      // Flat index of all plays for current season
+      const indexAll=useMemo(()=>{
+        if(!playData) return [];
+        const rows=[];
+        seriesList.forEach(series=>{
+          const plays= playData[series] || {};
+          Object.keys(plays).forEach(playNumber=>{
+            const s=plays[playNumber]||{};
+            const n=parseInt(s.numCalls||s.NumCalls)||0;
+            if(n<=0) return;
+            const pts=(+s['+2']||0)*2+(+s['+3']||0)*3+(+s['+2F']||0)*2+(+s['+3F']||0)*3;
+            const ppp = n ? pts/n : 0;
+            rows.push({
+              label: `${series} ${playNumber}`, // CHANGE: space only, no dash
+              series,
+              playNumber,
+              n,
+              ppp
+            });
+          });
+        });
+        return rows;
+      },[playData,seriesList]);
+
+      // CHANGE: suggestions show SERIES ONLY (no numbers); 3 visible then scroll
+      const suggestions = useMemo(()=>{
+        const q=query.trim().toLowerCase();
+        if(!q) return seriesList.slice(0,15); // cap pool a bit
+        return seriesList.filter(s=> s.toLowerCase().includes(q)).slice(0,50);
+      },[query,seriesList]);
+
+      // If a series is selected, keep ranking within that series; else global (but you prefer series flow)
+      const currentSeries = useMemo(()=>{
+        if(selected?.isSeries) return selected.series;
+        if(selected && selected.series) return selected.series; // when a specific play is selected
+        // fallback: if query exactly matches a series name
+        const q=query.trim();
+        if(q && seriesList.includes(q)) return q;
+        return null;
+      },[selected,query,seriesList]);
+
+      // CHANGE: Top/Bottom 3 respect current series AND rankSortMode
+      const ranks = useMemo(()=>{
+        let pool = indexAll;
+        if(currentSeries){
+          pool = pool.filter(p=> p.series === currentSeries);
+        }
+        const byPPPDesc = (a,b)=> b.ppp - a.ppp || b.n - a.n || a.label.localeCompare(b.label);
+        const byPPPAsc  = (a,b)=> a.ppp - b.ppp || a.n - b.n || a.label.localeCompare(b.label);
+        const byNDesc   = (a,b)=> b.n - a.n   || b.ppp - a.ppp || a.label.localeCompare(b.label);
+        const byNAsc    = (a,b)=> a.n - b.n   || a.ppp - b.ppp || a.label.localeCompare(b.label);
+
+        let top,bottom;
+        if(rankSortMode==='n'){
+          top = [...pool].sort(byNDesc).slice(0,3);
+          bottom = [...pool].sort(byNAsc).slice(0,3);
+        }else{
+          top = [...pool].sort(byPPPDesc).slice(0,3);
+          bottom = [...pool].sort(byPPPAsc).slice(0,3);
+        }
+        return {top,bottom};
+      },[indexAll,currentSeries,rankSortMode]);
+
+      // Selected stats (series aggregate or specific play)
+      const stats = useMemo(()=>{
+        if(!selected || !playData) return null;
+
+        if(selected.isSeries){
+          const plays = playData[selected.series] || {};
+          const agg = {'+2':0,'+3':0,'+2F':0,'+3F':0,'-2':0,'-3':0,'-2F':0,'-3F':0,'NOTHING':0,'TO':0,'FOF':0, NumCalls:0};
+          Object.keys(plays).forEach(num=>{
+            const s=plays[num]||{};
+            const n=parseInt(s.numCalls||s.NumCalls)||0;
+            if(n<=0) return;
+            ['+2','+3','+2F','+3F','-2','-3','-2F','-3F','NOTHING','TO','FOF'].forEach(k=>{
+              agg[k]+= (+s[k]||0);
+            });
+            agg.NumCalls += n;
+          });
+          return agg;
+        }else{
+          return playData[selected.series]?.[selected.playNumber] || null;
+        }
+      },[selected,playData]);
+
+      // Chart header numbers
+      const header=useMemo(()=>{
+        if(!stats) return null;
+        const n=parseInt(stats.numCalls||stats.NumCalls)||1;
+        const pts=(+stats['+2']||0)*2+(+stats['+3']||0)*3+(+stats['+2F']||0)*2+(+stats['+3F']||0)*3;
+        const ppp=n?pts/n:0;
+        const made=['+2','+3','+2F','+3F'].reduce((s,k)=>s+(+stats[k]||0),0);
+        const fg=n?(made/n)*100:0;
+        return {n,ppp,fg,fof:stats.FOF||0};
+      },[stats]);
+
+      // Charts
+      useEffect(()=>{
+        if(!stats || !donutRef.current) return;
+        if(donutInst.current) donutInst.current.destroy();
+        const total=parseInt(stats.NumCalls)||1;
+        const made=['+2','+3','+2F','+3F'].reduce((s,k)=>s+(+stats[k]||0),0);
+        const missTo=['-2','-3','-2F','-3F'].reduce((s,k)=>s+(+stats[k]||0),0);
+        const nothing=+stats.NOTHING||0;
+        const to=+stats.TO||0;
+        donutInst.current=new Chart(donutRef.current.getContext('2d'),{
+          type:'doughnut',
+          data:{labels:['Made FG','Miss/TO','Nothing','Turnover'],
+                datasets:[{data:[made,missTo,nothing,to].map(x=>x/total*100),
+                           backgroundColor:['#10B981','#EF4444','#6B7280','#F59E0B']}]},
+          options:{responsive:true,maintainAspectRatio:false,
+            plugins:{legend:{position:'bottom',labels:{color:dark?'#fff':'#374151',padding:12}},
+                     tooltip:{callbacks:{label:(c)=>`${c.label}: ${c.parsed.toFixed(1)}%`}}}}
+        });
+      },[stats,dark]);
+
+      useEffect(()=>{
+        if(!stats || !barRef.current) return;
+        if(barInst.current) barInst.current.destroy();
+        const vals=[
+          +stats['+3']||0,
+          +stats['+2']||0,
+          (+stats['-2']||0)+(+stats['-3']||0),
+          +stats['+3F']||0,
+          +stats['+2F']||0,
+          (+stats['-2F']||0)+(+stats['-3F']||0)
+        ];
+        barInst.current=new Chart(barRef.current.getContext('2d'),{
+          type:'bar',
+          data:{labels:['3pt','2pt','No Score','3pt+Foul','2pt+Foul','Miss+Foul'],
+                datasets:[{label:'Occurrences',data:vals,backgroundColor:'#3B82F6'}]},
+          options:{responsive:true,maintainAspectRatio:false,
+            scales:{y:{beginAtZero:true,ticks:{color:dark?'#9CA3AF':'#6B7280'},grid:{color:dark?'#374151':'#E5E7EB'}},
+                    x:{ticks:{color:dark?'#9CA3AF':'#6B7280'},grid:{color:dark?'#374151':'#E5E7EB'}}},
+            plugins:{legend:{display:false}}}
+        });
+      },[stats,dark]);
+
+      // Clicking a suggestion (series only)
+      const handleSeriesClick=(series)=>{
+        setSelected({isSeries:true, series});   // CHANGE: choose series aggregate
+        setQuery(series);
+        setRankSortMode('ppp');                 // CHANGE: series selection resets to PPP mode
+      };
+
+      return (
+        <div className="max-w-7xl mx-auto p-4">
+          {/* Header */}
+          <div className={`rounded-lg shadow p-4 mb-6 ${dark?'bg-gray-800':'bg-white'}`}>
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/6/60/Virginia_Tech_Hokies_logo.svg/2560px-Virginia_Tech_Hokies_logo.svg.png" alt="VT" className="h-12"/>
+                <h1 className="text-2xl font-bold">Sideline Analytics</h1>
+              </div>
+              <div className="flex gap-2">
+                <select value={season} onChange={(e)=>setSeason(e.target.value)}
+                        className={`selectlike px-3 py-2 rounded border ${dark?'bg-gray-700 border-gray-600 text-white':'bg-white border-gray-300'}`}>
+                  <option value="2024">Season 2024</option>
+                  <option value="2025">Season 2025</option>
+                </select>
+                {/* CHANGE: Live pill restored */}
+                <button
+                  onClick={()=>setUpdated(new Date().toLocaleString())}
+                  className={`px-3 py-2 rounded flex items-center gap-2 ${dark?'bg-green-600 text-white hover:bg-green-700':'bg-green-500 text-white hover:bg-green-600'}`}>
+                  <div className="w-2 h-2 rounded-full bg-green-300 animate-pulse"></div>
+                  Live
+                </button>
+                <button onClick={()=>setDark(d=>!d)}
+                        className={`px-3 py-2 rounded ${dark?'bg-gray-700 text-white hover:bg-gray-600':'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>
+                  {dark?'☀️ Light':'🌙 Dark'}
+                </button>
+              </div>
+            </div>
+            {updated && (
+              <div className="flex items-center gap-2 mt-2">
+                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                <div className="text-xs opacity-70">Live • {updated}</div>
+              </div>
+            )}
+          </div>
+
+          {/* Loading */}
+          {loading && (
+            <div className="animate-pulse space-y-4">
+              <div className="h-16 bg-gray-300 rounded"></div>
+              <div className="h-64 bg-gray-300 rounded"></div>
+              <div className="h-96 bg-gray-300 rounded"></div>
+            </div>
+          )}
+
+          {!loading && (
+            <>
+              {/* CHANGE: Search shows SERIES ONLY; dropdown max 3 visible then scroll */}
+              <div className={`rounded-lg shadow p-4 mb-4 ${dark?'bg-gray-800':'bg-white'}`}>
+                <label className="text-sm block mb-1">Search series (e.g., <span className="opacity-80">Alpha</span> or <span className="opacity-80">November</span>)</label>
+                <input
+                  type="text"
+                  value={query}
+                  onChange={(e)=> setQuery(e.target.value)}
+                  placeholder="Start typing…"
+                  className={`w-full px-3 py-2 rounded border ${dark?'bg-gray-700 border-gray-600 text-white placeholder-gray-400':'bg-white border-gray-300'}`}
+                />
+                <div className={`mt-2 ${dark?'border border-gray-700':''} suggestions-pane`}>
+                  {suggestions.length===0 && (
+                    <div className={`px-3 py-2 text-sm ${dark?'text-gray-300':'text-gray-600'}`}>No matches.</div>
+                  )}
+                  {suggestions.map((series,idx)=>(
+                    <div key={idx}
+                         className={`px-3 py-2 flex items-center justify-between cursor-pointer ${dark?'hover:bg-gray-800':'hover:bg-gray-100'}`}
+                         onClick={()=> handleSeriesClick(series)}>
+                      <div className="font-medium">{series}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Top/Bottom 3 */}
+              <div className="grid lg:grid-cols-2 gap-4 mb-6">
+                <div className={`rounded-lg shadow p-4 ${dark?'bg-gray-800':'bg-white'}`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <h2 className="text-lg font-bold">Top 3</h2>
+                    <span className="text-xs opacity-70">{currentSeries ? currentSeries : 'All Series'}</span>
+                  </div>
+                  <table className="tbl w-full">
+                    <thead className={`${dark?'bg-gray-900 text-gray-200':'bg-gray-100 text-gray-700'}`}>
+                      <tr>
+                        <th className="text-left">Play</th>
+                        {/* CHANGE: clickable Times Called header to toggle sort-by-N */}
+                        <th
+                          className="text-center cursor-pointer select-none"
+                          title="Sort by Times Called"
+                          onClick={()=> setRankSortMode(m=> m==='n'?'ppp':'n')}
+                        >
+                          Times Called
+                          <span style={{opacity:.75, marginLeft:4}}>
+                            {rankSortMode === 'n' ? '▾' : '▸'}
+                          </span>
+                        </th>
+                        <th className="text-right">Pts/Play</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ranks.top.length===0 && (<tr><td colSpan="3" className="py-3 text-sm opacity-70">No plays.</td></tr>)}
+                      {ranks.top.map((r,i)=>(
+                        <tr key={`t-${i}`} className={`${dark?'hover:bg-gray-800':'hover:bg-gray-100'} cursor-pointer`}
+                            onClick={()=>{
+                              // keep series context; select the specific play
+                              setSelected({isSeries:false, series:r.series, playNumber:r.playNumber});
+                              setQuery(r.series);
+                              // NOTE: do NOT change rankSortMode here (honor user's choice)
+                            }}>
+                          <td className="font-medium">{r.label}</td>
+                          {/* CHANGE: centered N */}
+                          <td className="text-center">{r.n}</td>
+                          <td className={`text-right font-semibold ${r.ppp>=1.0?'text-green-400':'text-red-400'}`}>{r.ppp.toFixed(2)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className={`rounded-lg shadow p-4 ${dark?'bg-gray-800':'bg-white'}`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <h2 className="text-lg font-bold">Bottom 3</h2>
+                    <span className="text-xs opacity-70">{currentSeries ? currentSeries : 'All Series'}</span>
+                  </div>
+                  <table className="tbl w-full">
+                    <thead className={`${dark?'bg-gray-900 text-gray-200':'bg-gray-100 text-gray-700'}`}>
+                      <tr>
+                        <th className="text-left">Play</th>
+                        {/* CHANGE: clickable Times Called header to toggle sort-by-N */}
+                        <th
+                          className="text-center cursor-pointer select-none"
+                          title="Sort by Times Called"
+                          onClick={()=> setRankSortMode(m=> m==='n'?'ppp':'n')}
+                        >
+                          Times Called
+                          <span style={{opacity:.75, marginLeft:4}}>
+                            {rankSortMode === 'n' ? '▾' : '▸'}
+                          </span>
+                        </th>
+                        <th className="text-right">Pts/Play</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ranks.bottom.length===0 && (<tr><td colSpan="3" className="py-3 text-sm opacity-70">No plays.</td></tr>)}
+                      {ranks.bottom.map((r,i)=>(
+                        <tr key={`b-${i}`} className={`${dark?'hover:bg-gray-800':'hover:bg-gray-100'} cursor-pointer`}
+                            onClick={()=>{
+                              setSelected({isSeries:false, series:r.series, playNumber:r.playNumber});
+                              setQuery(r.series);
+                            }}>
+                          <td className="font-medium">{r.label}</td>
+                          {/* CHANGE: centered N */}
+                          <td className="text-center">{r.n}</td>
+                          <td className={`text-right font-semibold ${r.ppp>=1.0?'text-green-400':'text-red-400'}`}>{r.ppp.toFixed(2)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Detail + charts */}
+              {selected && stats && header && (
+                <div className={`rounded-lg shadow p-6 ${dark?'bg-gray-800':'bg-white'}`}>
+                  <div className="flex items-center justify-between mb-4">
+                    {/* CHANGE: no dashes; series aggregate shows just series; specific shows "Series N" */}
+                    <h3 className="text-lg font-bold">
+                      {selected.isSeries ? `${selected.series}` : `${selected.series} ${selected.playNumber}`}
+                    </h3>
+                    <button className={`pill ${dark?'bg-gray-700':'bg-gray-200'}`} onClick={()=>setSelected(null)}>Clear</button>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                    <div>
+                      <div className="text-sm opacity-75">Avg Points</div>
+                      <div className={`text-2xl font-bold ${header.ppp>1.15?'text-green-500':header.ppp<0.95?'text-red-500':'text-blue-500'}`}>{header.ppp.toFixed(2)}</div>
+                    </div>
+                    <div>
+                      <div className="text-sm opacity-75">Times Called</div>
+                      <div className="text-2xl font-bold">{header.n}</div>
+                    </div>
+                    <div>
+                      <div className="text-sm opacity-75">FG %</div>
+                      <div className={`text-2xl font-bold ${header.fg>43?'text-green-500':header.fg<37?'text-red-500':'text-blue-500'}`}>{header.fg.toFixed(1)}%</div>
+                    </div>
+                    <div>
+                      <div className="text-sm opacity-75">Fouls on FGs</div>
+                      <div className="text-2xl font-bold">{header.fof}</div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <div className="text-sm font-semibold mb-2">Outcome Distribution</div>
+                      <div style={{height:'260px'}}><canvas ref={donutRef}></canvas></div>
+                    </div>
+                    <div>
+                      <div className="text-sm font-semibold mb-2">Scoring Breakdown</div>
+                      <div style={{height:'260px'}}><canvas ref={barRef}></canvas></div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      );
+    }
+
+    ReactDOM.render(<App/>, document.getElementById('root'));
+  </script>
+</body>
+</html>
