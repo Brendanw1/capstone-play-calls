@@ -77,6 +77,9 @@
       const [topSortByN,setTopSortByN]=useState(true);                     // CHANGE: allow clicking "Times Called" to sort Top 3
       const [botSortByN,setBotSortByN]=useState(true);                     // CHANGE: allow clicking "Times Called" to sort Bottom 3
 
+      // MODE
+      const [postGameMode, setPostGameMode] = useState(false);
+
       // CHARTS
       const donutRef=useRef(null), donutInst=useRef(null);
       const barRef=useRef(null), barInst=useRef(null);
@@ -278,7 +281,7 @@
             }
           }
         });
-      }, [seriesScatter, dark]);
+      }, [seriesScatter, dark, postGameMode]);
 
       // Charts
       useEffect(()=>{
@@ -357,6 +360,18 @@
                 </button>
                 <button onClick={()=>setDark(d=>!d)}
                         className={`px-3 py-2 rounded ${dark?'bg-gray-700 text-white hover:bg-gray-600':'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>{dark?'☀️ Light':'🌙 Dark'}</button>
+                <button
+                  onClick={() => setPostGameMode(m => !m)}
+                  className={`px-3 py-2 rounded shadow ${
+                    postGameMode
+                      ? 'bg-blue-600 text-white hover:bg-blue-700'
+                      : dark
+                        ? 'bg-gray-700 text-white hover:bg-gray-600'
+                        : 'bg-gray-200 text-gray-900 hover:bg-gray-300'
+                  }`}
+                >
+                  {setPostGameMode ? 'Post-Game Mode' : 'In-Game Mode'}
+                </button>
               </div>
             </div>
             {updated && (
@@ -466,7 +481,7 @@
               </div>
 
               {/* Series Heatmap (shown only when a series is selected AND no play is selected) */}
-              {selectedSeries && !selectedPlay && seriesHeatmap && (
+              {postGameMode && selectedSeries && !selectedPlay && seriesHeatmap && (
                 <div className={`rounded-lg shadow p-6 mb-6 ${dark ? 'bg-gray-800' : 'bg-white'}`}>
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-lg font-bold">Outcome Heatmap — {selectedSeries}</h3>
@@ -519,7 +534,7 @@
               )}
 
               {/* Usage vs Success Scatterplot (series selected, no play selected) */}
-              {selectedSeries && !selectedPlay && seriesScatter && (
+              {postGameMode && selectedSeries && !selectedPlay && seriesScatter && (
                 <div className={`rounded-lg shadow p-6 mb-6 ${dark ? 'bg-gray-800' : 'bg-white'}`}>
                   <h3 className="text-lg font-bold mb-4">Usage vs Success — {selectedSeries}</h3>
 
