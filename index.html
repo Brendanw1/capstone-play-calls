@@ -162,7 +162,7 @@
             width: 100%;
             margin-top: 1rem;
             padding: 0.75rem;
-            background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+            background: #642667;
             color: white;
             border: none;
             border-radius: 8px;
@@ -173,12 +173,12 @@
             justify-content: center;
             gap: 0.5rem;
             transition: all 0.3s;
-            box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+            box-shadow: 0 4px 12px #642667;
         }
 
         .add-play-btn:hover {
             transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(139, 92, 246, 0.4);
+            box-shadow: 0 6px 20px #562159;
         }
 
         .modal-overlay {
@@ -2508,8 +2508,8 @@
                                     onClick={() => setShowAddPlayModal(true)}
                                     className={`px-4 py-2 rounded-md transition-colors flex items-center gap-2 ${
                                         darkMode 
-                                            ? 'bg-purple-600 text-white hover:bg-purple-700'
-                                            : 'bg-purple-500 text-white hover:bg-purple-600'
+                                            ? 'bg-[#642667] text-white hover:bg-[#5b1f5a]' 
+                                            : 'bg-[#642667] text-white hover:bg-[#5b1f5a]'
                                     }`}
                                 >
                                     + Add Play
@@ -2568,8 +2568,8 @@
                                     loading
                                         ? 'bg-gray-400 cursor-not-allowed'
                                         : darkMode 
-                                            ? 'bg-blue-600 text-white hover:bg-blue-700' 
-                                            : 'bg-blue-500 text-white hover:bg-blue-600'
+                                            ? 'bg-[#508590] text-white hover:bg-[#3e6b6f]' 
+                                            : 'bg-[#508590] text-white hover:bg-[#3e6b6f]'
                                 }`}
                             >
                                 {loading ? '↻ Refreshing...' : '↻ Refresh'}
@@ -2577,7 +2577,7 @@
                                 
                                 <button
                                     onClick={() => setDarkMode(prev => !prev)}
-                                    className={`px-3 py-2 rounded-md transition-colors ${darkMode ? 'bg-gray-700 text-white hover:bg-gray-600' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}
+                                    className={`px-3 py-2 rounded-md transition-colors ${darkMode ? 'bg-[#E5E1E6] text-gray-800 hover:bg-[#D1CFCF]' : 'bg-[#E5E1E6] text-gray-800 hover:bg-[#D1CFCF]'}`}
                                 >
                                     {darkMode ? '☀️ Light' : '🌙 Dark'}
                                 </button>
