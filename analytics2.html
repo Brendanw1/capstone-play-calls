@@ -50,13 +50,6 @@
   <script type="text/babel">
     const {useState,useEffect,useMemo,useRef,useCallback} = React;
 
-    // Outcomes for heatmap display
-    const OUTCOME_KEYS = [
-      '+3', '+2', '-2', '-3',
-      '+3F', '+2F', '-2F', '-3F',
-      'NOTHING', 'TO', 'FOF'
-    ];
-
     function App(){
       // THEME
       const [dark,setDark]=useState(true);
@@ -77,16 +70,9 @@
       const [topSortByN,setTopSortByN]=useState(true);                     // CHANGE: allow clicking "Times Called" to sort Top 3
       const [botSortByN,setBotSortByN]=useState(true);                     // CHANGE: allow clicking "Times Called" to sort Bottom 3
 
-      // MODE
-      const [postGameMode, setPostGameMode] = useState(false);
-
       // CHARTS
       const donutRef=useRef(null), donutInst=useRef(null);
       const barRef=useRef(null), barInst=useRef(null);
-
-      // Scatter chart (Usage vs Success)
-      const scatterRef = useRef(null);
-      const scatterInst = useRef(null);
 
       // Load from Firebase (live listener)
       const load=useCallback(()=>{
@@ -118,27 +104,8 @@
             const s=plays[num]||{};
             const n=parseInt(s.NumCalls||s.numCalls)||0;
             if(n<=0) return;
-            // Prefer Firebase PPP if available
-            let ppp = 0;
-            if (s.PPP !== undefined && s.PPP !== null) {
-                ppp = parseFloat(s.PPP) || 0;
-            } else {
-                // fallback if PPP missing (should never happen now)
-                const pts =
-                  (s["+2"]||0)*2 +
-                  (s["+3"]||0)*3 +
-                  (s["+2F"]||0)*2 +
-                  (s["+3F"]||0)*3 +
-                  (s.FT_Made || 0);
-
-                ppp = n ? pts / n : 0;
-            }
-            const ftAtt = s.FT_Att || 0;
-            const ftMade = s.FT_Made || 0;
-            const ftPct = ftAtt ? (ftMade / ftAtt) * 100 : 0;
-
-            const ftr = s.FreeThrowRate || 0;
-            const fr = s.FoulRate || 0;
+            const pts=(+s['+2']||0)*2+(+s['+3']||0)*3+(+s['+2F']||0)*2+(+s['+3F']||0)*3;
+            const ppp=n?pts/n:0;
             out.push({series,playNumber:num,n,ppp,stats:s});
           });
         });
@@ -196,51 +163,6 @@
         return agg;
       },[selectedSeries,selectedPlay,playData]);
 
-      // Heatmap data for entire series (only if series selected, no play selected)
-      const seriesHeatmap = useMemo(() => {
-        if (!selectedSeries || selectedPlay) return null;
-        if (!playData) return null;
-
-        const plays = playData[selectedSeries];
-        if (!plays) return null;
-
-        return Object.keys(plays).map(playNumber => {
-          const s = plays[playNumber] || {};
-          return {
-            label: `${selectedSeries} ${playNumber}`,
-            data: OUTCOME_KEYS.map(k => +s[k] || 0)
-          };
-        });
-      }, [selectedSeries, selectedPlay, playData]);
-
-      // Usage vs Success scatter data (for selected series, only when no play selected)
-      const seriesScatter = useMemo(() => {
-        if (!selectedSeries || selectedPlay) return null;
-        if (!playData) return null;
-
-        const plays = playData[selectedSeries];
-        if (!plays) return null;
-
-        return Object.keys(plays).map(playNumber => {
-          const s = plays[playNumber] || {};
-          const n = parseInt(s.NumCalls || s.numCalls) || 0;
-
-          const points =
-            (+s["+2"] || 0) * 2 +
-            (+s["+3"] || 0) * 3 +
-            (+s["+2F"] || 0) * 2 +
-            (+s["+3F"] || 0) * 3;
-
-          const ppp = n ? points / n : 0;
-
-          return {
-            label: `${selectedSeries} ${playNumber}`,
-            x: n,
-            y: ppp
-          };
-        });
-      }, [selectedSeries, selectedPlay, playData]);
-
       const header=useMemo(()=>{
         if(!detailStats) return null;
         const n=parseInt(detailStats.NumCalls)||1;
@@ -250,57 +172,6 @@
         const fg=n?(made/n)*100:0;
         return {n,ppp,fg,fof:detailStats.FOF||0};
       },[detailStats]);
-
-      // Scatterplot: Usage (N) vs Success (PPP)
-      useEffect(() => {
-        if (!seriesScatter || !scatterRef.current) return;
-
-        if (scatterInst.current) scatterInst.current.destroy();
-
-        scatterInst.current = new Chart(scatterRef.current.getContext("2d"), {
-          type: "scatter",
-          data: {
-            datasets: [
-              {
-                label: "Plays",
-                data: seriesScatter.map(p => ({ x: p.x, y: p.y })),
-                backgroundColor: "#3B82F6",
-                borderColor: "#2563EB",
-                pointRadius: 6,
-                pointHoverRadius: 8
-              }
-            ]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-              legend: { display: false },
-              tooltip: {
-                callbacks: {
-                  label: (ctx) => {
-                    const p = seriesScatter[ctx.dataIndex];
-                    return `${p.label}: N=${p.x}, PPP=${p.y.toFixed(2)}`;
-                  }
-                }
-              }
-            },
-            scales: {
-              x: {
-                title: { display: true, text: "Times Called (N)", color: dark ? "#f9fafb" : "#111827" },
-                ticks: { color: dark ? "#9CA3AF" : "#374151" },
-                grid: { color: dark ? "#374151" : "#E5E7EB" }
-              },
-              y: {
-                title: { display: true, text: "Points per Play (PPP)", color: dark ? "#f9fafb" : "#111827" },
-                ticks: { color: dark ? "#9CA3AF" : "#374151" },
-                grid: { color: dark ? "#374151" : "#E5E7EB" },
-                beginAtZero: true
-              }
-            }
-          }
-        });
-      }, [seriesScatter, dark, postGameMode]);
 
       // Charts
       useEffect(()=>{
@@ -379,18 +250,6 @@
                 </button>
                 <button onClick={()=>setDark(d=>!d)}
                         className={`px-3 py-2 rounded ${dark?'bg-gray-700 text-white hover:bg-gray-600':'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>{dark?'☀️ Light':'🌙 Dark'}</button>
-                <button
-                  onClick={() => setPostGameMode(m => !m)}
-                  className={`px-3 py-2 rounded shadow ${
-                    postGameMode
-                      ? 'bg-blue-600 text-white hover:bg-blue-700'
-                      : dark
-                        ? 'bg-gray-700 text-white hover:bg-gray-600'
-                        : 'bg-gray-200 text-gray-900 hover:bg-gray-300'
-                  }`}
-                >
-                  {setPostGameMode ? 'Post-Game Mode' : 'In-Game Mode'}
-                </button>
               </div>
             </div>
             {updated && (
@@ -498,70 +357,6 @@
                   </table>
                 </div>
               </div>
-
-              {/* Series Heatmap (shown only when a series is selected AND no play is selected) */}
-              {postGameMode && selectedSeries && !selectedPlay && seriesHeatmap && (
-                <div className={`rounded-lg shadow p-6 mb-6 ${dark ? 'bg-gray-800' : 'bg-white'}`}>
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-bold">Outcome Heatmap — {selectedSeries}</h3>
-                    <span className="text-xs opacity-70">
-                      {seriesHeatmap.length} plays
-                    </span>
-                  </div>
-
-                  <div className="overflow-x-auto">
-                    <table className="tbl w-full">
-                      <thead className={`${dark ? 'bg-gray-900 text-gray-200' : 'bg-gray-100 text-gray-700'}`}>
-                        <tr>
-                          <th className="text-left">Play</th>
-                          {OUTCOME_KEYS.map(k => (
-                            <th key={k} className="text-center">{k}</th>
-                          ))}
-                        </tr>
-                      </thead>
-
-                      <tbody>
-                        {seriesHeatmap.map((row, i) => (
-                          <tr key={i} className={`${dark ? 'hover:bg-gray-800' : 'hover:bg-gray-100'}`}>
-                            <td className="font-medium">{row.label}</td>
-
-                            {row.data.map((val, j) => {
-                              const intensity = Math.min(1, val / 5);
-                              const bg = `rgba(59,130,246,${intensity})`;
-
-                              return (
-                                <td
-                                  key={j}
-                                  className="text-center rounded"
-                                  style={{
-                                    backgroundColor: bg,
-                                    color: intensity > 0.5 ? 'white' : (dark ? '#f9fafb' : '#111827'),
-                                    fontWeight: '500',
-                                    padding: '.5rem'
-                                  }}
-                                >
-                                  {val}
-                                </td>
-                              );
-                            })}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {/* Usage vs Success Scatterplot (series selected, no play selected) */}
-              {postGameMode && selectedSeries && !selectedPlay && seriesScatter && (
-                <div className={`rounded-lg shadow p-6 mb-6 ${dark ? 'bg-gray-800' : 'bg-white'}`}>
-                  <h3 className="text-lg font-bold mb-4">Usage vs Success — {selectedSeries}</h3>
-
-                  <div style={{ height: "320px" }}>
-                    <canvas ref={scatterRef}></canvas>
-                  </div>
-                </div>
-              )}
 
               {/* ===== Detail card ===== */}
               {(selectedSeries && detailStats && header) && (

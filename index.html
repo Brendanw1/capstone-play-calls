@@ -905,36 +905,113 @@
                         statsPath = `playcalls/${selectedYear}/stats/series/${selectedPlay.series}/${selectedPlay.playName}`;
                         statsRef = database.ref(statsPath);
                         const snapshot = await statsRef.once('value');
-                        currentData = snapshot.val() || {
+                        const defaultStats = {
                             '-3': 0, '-2': 0, '+2': 0, '+2F': 0, '+3': 0, '+3F': 0,
-                            '-2F': 0, '-3F': 0, 'AvgPointsNoFTs': 0, 'FOF': 0,
-                            'MadeFG': 0, 'MissTO': 0, 'NOTHING': 0, 'NumCalls': 0, 'TO': 0,
-                            'Foul_Floor': 0, 'Foul_Bonus': 0
+                            '-2F': 0, '-3F': 0,
+                            'NOTHING': 0, 'TO': 0,
+
+                            // fouls
+                            'Foul_Floor': 0,
+                            'Foul_Bonus': 0,
+                            'FOF': 0,
+
+                            // counters
+                            NumCalls: 0,
+                            MadeFG: 0,
+                            MissTO: 0,
+
+                            // free throw stats
+                            FT_Made: 0,
+                            FT_Att: 0,
+
+                            // calculated metrics
+                            PPP: 0,
+                            AvgPointsNoFTs: 0,
+                            FoulRate: 0,
+                            FreeThrowRate: 0
                         };
 
-                        updates = { ...currentData };
-                        updates[outcome] = (parseFloat(currentData[outcome]) || 0) + 1;
-                        updates.NumCalls = (parseInt(currentData.NumCalls) || 0) + 1;
+                        currentData = snapshot.val() || defaultStats;
 
-                        const totalCalls = updates.NumCalls;
-                        let totalPoints = (updates['+2'] * 2) + (updates['+3'] * 3) + 
-                                        (updates['+2F'] * 2) + (updates['+3F'] * 3);
-                        
-                        if (needsFreeThrows) {
-                            totalPoints += actualFtMade;
-                        }
+                        // Merge with defaults to ensure ALL fields always exist
+                        currentData = { ...defaultStats, ...currentData };
 
-                        updates.AvgPointsNoFTs = totalPoints / totalCalls;
+                    updates = { ...currentData };
 
-                        const madeFG = updates['+2'] + updates['+3'] + updates['+2F'] + updates['+3F'];
-                        updates.MadeFG = madeFG / totalCalls;
+                    // Increment outcome-specific counter
+                    updates[outcome] = (parseFloat(currentData[outcome]) || 0) + 1;
+                    updates.NumCalls = (parseInt(currentData.NumCalls) || 0) + 1;
 
-                        const missTO = updates['-2'] + updates['-3'] + updates['-2F'] + updates['-3F'] + updates.TO;
-                        updates.MissTO = missTO / totalCalls;
+                    // Track FT makes & attempts for this play
+                    if (!updates.FT_Made) updates.FT_Made = 0;
+                    if (!updates.FT_Att) updates.FT_Att = 0;
 
-                        updates.FOF = updates['+2F'] + updates['+3F'] + updates['-2F'] + updates['-3F'];
+                    updates.FT_Made += actualFtMade;
 
-                        await statsRef.set(updates);
+                    if (needsFreeThrows) {
+                        updates.FT_Att += freeThrowData.attempts;
+                    }
+
+                    // Compute total points (INCLUDING FTs)
+                    let totalFGPoints =
+                        (updates['+2'] * 2) +
+                        (updates['+3'] * 3) +
+                        (updates['+2F'] * 2) +
+                        (updates['+3F'] * 3);
+
+                    // Add cumulative FT makes
+                    let totalFTPoints = updates.FT_Made;
+
+                    let totalPoints = totalFGPoints + totalFTPoints;
+
+                    // Update PPP (with free throws)
+                    updates.PPP = totalPoints / updates.NumCalls;
+
+                    // Maintain old metric (PPP excluding FTs)
+                    updates.AvgPointsNoFTs = totalFGPoints / updates.NumCalls;
+
+                    // Field goal success/ failure rates
+                    const madeFG =
+                        (updates['+2'] || 0) +
+                        (updates['+3'] || 0) +
+                        (updates['+2F'] || 0) +
+                        (updates['+3F'] || 0);
+
+                    const missTO =
+                        (updates['-2'] || 0) +
+                        (updates['-3'] || 0) +
+                        (updates['-2F'] || 0) +
+                        (updates['-3F'] || 0) +
+                        (updates.TO || 0);
+
+                    updates.MadeFG = madeFG / updates.NumCalls;
+                    updates.MissTO = missTO / updates.NumCalls;
+
+                    // Foul-related metrics
+                    const shootingFouls =
+                        (updates['+2F'] || 0) +
+                        (updates['+3F'] || 0) +
+                        (updates['-2F'] || 0) +
+                        (updates['-3F'] || 0) +
+                        (updates['Foul_Bonus'] || 0);
+
+                    const totalFouls = shootingFouls + (updates['Foul_Floor'] || 0);
+
+                    // Foul Rate: ANY foul
+                    updates.FoulRate = totalFouls / updates.NumCalls;
+
+                    // FT Rate: Shooting fouls that produce FT attempts
+                    updates.FreeThrowRate = shootingFouls / updates.NumCalls;
+
+                    // Keep existing FOF (fouls on FG shot attempts)
+                    updates.FOF =
+                        (updates['+2F'] || 0) +
+                        (updates['+3F'] || 0) +
+                        (updates['-2F'] || 0) +
+                        (updates['-3F'] || 0);
+
+                    await statsRef.set(updates);
+
                     }
 
                     // Log to possessions (if not practice)
