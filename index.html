@@ -897,12 +897,18 @@
                     let currentData = null;
                     let updates = null;
                     
-                    if (selectedPlay.type !== 'transition' && 
-                        selectedPlay.type !== 'no_play' && 
-                        selectedPlay.type !== 'whats_next') {
-                        
-                        // Regular playcall - update stats
+                    // ALL plays get stats now (including special types)
+                    if (selectedPlay.type === 'transition') {
+                        statsPath = `playcalls/${selectedYear}/stats/series/Transition/1`;
+                    } else if (selectedPlay.type === 'no_play') {
+                        statsPath = `playcalls/${selectedYear}/stats/series/NoPlay/1`;
+                    } else if (selectedPlay.type === 'whats_next') {
+                        statsPath = `playcalls/${selectedYear}/stats/series/WhatsNext/1`;
+                    } else {
+                        // Regular playcall
                         statsPath = `playcalls/${selectedYear}/stats/series/${selectedPlay.series}/${selectedPlay.playName}`;
+                    }    
+                        // Regular playcall - update stats
                         statsRef = database.ref(statsPath);
                         const snapshot = await statsRef.once('value');
                         const defaultStats = {
@@ -1012,7 +1018,7 @@
 
                     await statsRef.set(updates);
 
-                    }
+                    
 
                     // Log to possessions (if not practice)
                     if (selectedGame.date !== 'practice') {
