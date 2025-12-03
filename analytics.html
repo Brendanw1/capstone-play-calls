@@ -118,8 +118,27 @@
             const s=plays[num]||{};
             const n=parseInt(s.NumCalls||s.numCalls)||0;
             if(n<=0) return;
-            const pts=(+s['+2']||0)*2+(+s['+3']||0)*3+(+s['+2F']||0)*2+(+s['+3F']||0)*3;
-            const ppp=n?pts/n:0;
+            // Prefer Firebase PPP if available
+            let ppp = 0;
+            if (s.PPP !== undefined && s.PPP !== null) {
+                ppp = parseFloat(s.PPP) || 0;
+            } else {
+                // fallback if PPP missing (should never happen now)
+                const pts =
+                  (s["+2"]||0)*2 +
+                  (s["+3"]||0)*3 +
+                  (s["+2F"]||0)*2 +
+                  (s["+3F"]||0)*3 +
+                  (s.FT_Made || 0);
+
+                ppp = n ? pts / n : 0;
+            }
+            const ftAtt = s.FT_Att || 0;
+            const ftMade = s.FT_Made || 0;
+            const ftPct = ftAtt ? (ftMade / ftAtt) * 100 : 0;
+
+            const ftr = s.FreeThrowRate || 0;
+            const fr = s.FoulRate || 0;
             out.push({series,playNumber:num,n,ppp,stats:s});
           });
         });
