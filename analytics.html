@@ -382,14 +382,14 @@
                 <button
                   onClick={() => setPostGameMode(m => !m)}
                   className={`px-3 py-2 rounded shadow ${
-                    postGameMode
-                      ? 'bg-blue-600 text-white hover:bg-blue-700'
-                      : dark
-                        ? 'bg-gray-700 text-white hover:bg-gray-600'
-                        : 'bg-gray-200 text-gray-900 hover:bg-gray-300'
+                    // postGameMode
+                    //  ? 'bg-blue-600 text-white hover:bg-blue-700'
+                    dark
+                      ? 'bg-gray-700 text-white hover:bg-gray-600'
+                      : 'bg-gray-200 text-gray-900 hover:bg-gray-300'
                   }`}
                 >
-                  {setPostGameMode ? 'Post-Game Mode' : 'In-Game Mode'}
+                  {postGameMode ? 'Post-Game Mode' : 'In-Game Mode'}
                 </button>
               </div>
             </div>
