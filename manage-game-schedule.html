@@ -208,6 +208,7 @@
             const opponent = document.getElementById('opponent').value;
             const location = document.getElementById('location').value;
             const time = document.getElementById('time').value;
+            const conference = document.getElementById('conference').value;
 
             if (!date || !opponent) {
                 alert('Please fill in date and opponent');
@@ -220,6 +221,7 @@
                 opponent: opponent,
                 location: location,
                 time: time,
+                conference: conference,
                 displayName: `${formatDate(date)} ${getVsAt(location)} ${opponent} (${location})${time ? ' - ' + time : ''}`
             };
 
