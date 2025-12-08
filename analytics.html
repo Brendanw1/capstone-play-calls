@@ -88,6 +88,24 @@
       const scatterRef = useRef(null);
       const scatterInst = useRef(null);
 
+      // Spider (Radar) Chart
+      const radarRef = useRef(null);
+      const radarInst = useRef(null);
+
+      // Selected plays for radar comparison (array length 1–3)
+      const [radarSelection, setRadarSelection] = useState([]);
+
+      // Reset all spider-chart state whenever series or season changes
+      useEffect(() => {
+        setRadarSelection([]);
+        setSelectedPlay(null);
+
+        if (radarInst.current) {
+          radarInst.current.destroy();
+          radarInst.current = null;
+        }
+      }, [season, selectedSeries]);
+
       // Load from Firebase (live listener)
       const load=useCallback(()=>{
         setLoading(true);
@@ -206,9 +224,23 @@
 
         return Object.keys(plays).map(playNumber => {
           const s = plays[playNumber] || {};
+
+          // Raw values
+          const counts = OUTCOME_KEYS.map(k => +s[k] || 0);
+
+          // Total occurrences for this play
+          const total = counts.reduce((a, b) => a + b, 0);
+
+          // Convert to percentages (0–100)
+          const percents = total > 0
+            ? counts.map(c => (c / total) * 100)
+            : counts.map(() => 0);
+
           return {
             label: `${selectedSeries} ${playNumber}`,
-            data: OUTCOME_KEYS.map(k => +s[k] || 0)
+            raw: counts,      
+            data: percents,   
+            total
           };
         });
       }, [selectedSeries, selectedPlay, playData]);
@@ -321,6 +353,117 @@
         });
       },[detailStats,dark]);
 
+      useEffect(() => {
+        if (!radarRef.current) return;
+
+        // If no data exists for this series, nuke the chart and stop
+        if (!selectedSeries || !playData || !playData[selectedSeries]) {
+          if (radarInst.current) {
+            radarInst.current.destroy();
+            radarInst.current = null;
+          }
+          return;
+        }
+
+        const labels = ["FG%", "Free Throw Rate", "PPP", "Miss/TO"];
+        const datasets = [];
+
+        // ----- CASE 1: Single play selected -----
+        if (selectedPlay) {
+          const s = playData[selectedSeries][selectedPlay.playNumber];
+
+          if (!s) {
+            if (radarInst.current) {
+              radarInst.current.destroy();
+              radarInst.current = null;
+            }
+            return;
+          }
+
+          const out = buildRadarStats(s, `${selectedSeries} ${selectedPlay.playNumber}`);
+          datasets.push({
+            label: out.label,
+            data: out.values,
+            realValues: out.real,
+            fill: true,
+            backgroundColor: "rgba(59,130,246,0.3)",
+            borderColor: "#3B82F6",
+          });
+        }
+
+        // ----- CASE 2: Comparison mode -----
+        else if (radarSelection.length > 0) {
+          const COLORS = ["#3B82F6", "#10B981", "#F59E0B"];
+
+          radarSelection.forEach((num, i) => {
+            const s = playData[selectedSeries][num];
+            if (!s) return; // skip invalid entries
+
+            const out = buildRadarStats(s, `${selectedSeries} ${num}`);
+            const C = COLORS[i % COLORS.length];
+
+            datasets.push({
+              label: out.label,
+              data: out.values,
+              realValues: out.real,
+              fill: true,
+              backgroundColor: C + "40",
+              borderColor: C,
+            });
+          });
+        }
+
+        if (datasets.length === 0) {
+          if (radarInst.current) radarInst.current.destroy();
+          radarInst.current = null;
+          return;
+        }
+
+        if (radarInst.current) radarInst.current.destroy();
+
+        radarInst.current = new Chart(radarRef.current, {
+          type: "radar",
+          data: { labels, datasets },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              r: {
+                min: 0,
+                max: 1,
+                ticks: { display: false },
+                grid: { color: dark ? "#4B5563" : "#D1D5DB" },
+                pointLabels: {
+                  color: dark ? "#f9fafb" : "#111827",
+                  font: { size: 12 },
+                },
+              },
+            },
+            plugins: {
+              legend: { labels: { color: dark ? "#fff" : "#111" } },
+              tooltip: {
+                callbacks: {
+                  label: (ctx) => {
+                    const real = ctx.dataset.realValues;
+                    const metric = ctx.label;
+
+                    switch (metric) {
+                      case "FG%": return `FG%: ${(real.fg*100).toFixed(1)}%`;
+                      case "Free Throw Rate": return `Free Throw Rate: ${(real.ftr*100).toFixed(1)}%`;
+                      case "PPP": return `PPP: ${real.ppp.toFixed(2)}`;
+                      case "Miss/TO": return `Miss/TO Rate: ${((1-real.mtorInv)*100).toFixed(1)}%`;
+                      default: return "";
+                    }
+                  }
+                }
+              }
+            }
+          }
+        });
+}, [selectedSeries, selectedPlay, radarSelection, playData, dark]);
+
+
+
       useEffect(()=>{
         if(!detailStats || !barRef.current) return;
         if(barInst.current) barInst.current.destroy();
@@ -343,11 +486,45 @@
         });
       },[detailStats,dark]);
 
+      function buildRadarStats(s, playNumberLabel = "") {
+        const n = parseInt(s.NumCalls || s.numCalls) || 1;
+
+        const made = ['+2','+3','+2F','+3F'].reduce((sum, k) => sum + (+s[k] || 0), 0);
+        const misses = ['-2','-3','-2F','-3F'].reduce((sum, k) => sum + (+s[k] || 0), 0);
+        const to = +s.TO || 0;
+
+        const fg = n ? made / n : 0;
+
+        const ftr = s.FreeThrowRate !== undefined ? +s.FreeThrowRate : 0;
+
+        const pts =
+          (+s["+2"] || 0) * 2 +
+          (+s["+3"] || 0) * 3 +
+          (+s["+2F"] || 0) * 2 +
+          (+s["+3F"] || 0) * 3;
+
+        const ppp = n ? pts / n : 0;
+
+        const mtor = n ? (misses + to) / n : 0;
+        const mtorInv = 1 - mtor;
+
+        // Normalize PPP (0–3 -> 0–1)
+        const pppNorm = Math.min(ppp / 3, 1);
+
+        return {
+          label: playNumberLabel,
+          values: [fg, ftr, pppNorm, mtorInv],
+          real: { fg, ftr, ppp, mtorInv }
+        };
+      }
+
+
       // Helpers
       const playLabel = (r)=> `${r.series} ${r.playNumber}`;               // CHANGE: no dashes anywhere
 
       const clickPlayRow=(r)=>{
         // CHANGE: keep current series context; only set play within that series
+        setRadarSelection([]);
         setSelectedSeries(r.series);
         setSelectedPlay({series:r.series,playNumber:r.playNumber});
       };
@@ -526,7 +703,7 @@
                             <td className="font-medium">{row.label}</td>
 
                             {row.data.map((val, j) => {
-                              const intensity = Math.min(1, val / 5);
+                              const intensity = val / 100;
                               const bg = `rgba(59,130,246,${intensity})`;
 
                               return (
@@ -540,7 +717,7 @@
                                     padding: '.5rem'
                                   }}
                                 >
-                                  {val}
+                                  {val.toFixed(0)}%
                                 </td>
                               );
                             })}
@@ -601,6 +778,78 @@
                       <div className="text-sm font-semibold mb-2">Scoring Breakdown</div>
                       <div style={{height:'260px'}}><canvas ref={barRef}></canvas></div>
                     </div>
+                  </div>
+                </div>
+              )}
+              {/* ===== Combined Play Selection + Radar Section ===== */}
+              {selectedSeries && (selectedPlay || !selectedPlay) && (
+                <div
+                  className={`rounded-lg shadow p-6 mt-6 ${
+                    dark ? 'bg-gray-800' : 'bg-white'
+                  }`}
+                  style={{ minHeight: "480px" }}
+                >
+                  <h3 className="text-lg font-bold mb-4">Play Profile</h3>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    
+                    {/* LEFT — Play Selector */}
+                    <div>
+                      {!selectedPlay && (
+                        <>
+                          <label className="text-sm opacity-75 block mb-2">
+                            Compare plays (select up to 3)
+                          </label>
+
+                          <div className="space-y-2">
+                            {Object.keys(playData[selectedSeries]).map(num => {
+                              const label = `${selectedSeries} ${num}`;
+                              const selected = radarSelection.includes(num);
+
+                              return (
+                                <button
+                                  key={num}
+                                  onClick={() => {
+                                    // Toggle logic
+                                    if (selected) {
+                                      // Remove
+                                      setRadarSelection(radarSelection.filter(x => x !== num));
+                                    } else {
+                                      // Add (max 3)
+                                      if (radarSelection.length < 3) {
+                                        setRadarSelection([...radarSelection, num]);
+                                      }
+                                    }
+                                  }}
+                                  className={`w-full px-3 py-2 rounded text-left border ${
+                                    selected
+                                      ? (dark ? "bg-blue-600 border-blue-500 text-white" : "bg-blue-100 border-blue-400 text-blue-900")
+                                      : (dark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300 text-gray-900")
+                                  }`}
+                                >
+                                  {label}
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                        </>
+                      )}
+
+                      {selectedPlay && (
+                        <div className="text-sm opacity-75">
+                          Showing radar for: <strong>{selectedSeries} {selectedPlay.playNumber}</strong>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* RIGHT — Radar Chart */}
+                    <div className="flex justify-center">
+                      <div style={{ height: "540px", width: "540px" }}>
+                        <canvas ref={radarRef}></canvas>
+                      </div>
+                    </div>
+
                   </div>
                 </div>
               )}
