@@ -1025,8 +1025,10 @@
 
                     // Log to possessions (if not practice)
                     if (selectedGame.date !== 'practice') {
+
+                        const possessionKey = `Possession${possessionCount.toString().padStart(3, '0')}`;
                         const possessionRef = database.ref(
-                            `playcalls/${selectedYear}/games/${selectedGame.date}/possessions`
+                            `playcalls/${selectedYear}/games/${selectedGame.date}/possessions/${possessionKey}`
                         ).push();
                         
                         let points = 0;
@@ -1127,14 +1129,11 @@
 
                     // Remove from games if not practice
                     if (!lastLoggedPlay.isPractice && lastLoggedPlay.gameDate) {
+                        const lastPossessionKey = `Possession${(possessionCount - 1).toString().padStart(3, '0')}`;
                         const possessionsRef = database.ref(
-                            `playcalls/${selectedYear}/games/${lastLoggedPlay.gameDate}/possessions`
+                            `playcalls/${selectedYear}/games/${lastLoggedPlay.gameDate}/possessions/${lastPossessionKey}`
                         );
-                        const snapshot = await possessionsRef.orderByChild('timestamp').limitToLast(1).once('value');
-                        
-                        snapshot.forEach((child) => {
-                            child.ref.remove();
-                        });
+                        await possessionRef.remove();
                         
                         setPossessionCount(prev => Math.max(0, prev - 1));
                     }
