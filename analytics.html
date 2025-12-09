@@ -57,6 +57,9 @@
       'NOTHING', 'TO', 'FOF'
     ];
 
+    const VT_PURPLE = '#642667'; // Pylon Purple
+    const VT_PINK   = '#CE0058'; // Boundless Pink
+
     function App(){
       // THEME
       const [dark,setDark]=useState(true);
@@ -73,37 +76,23 @@
       const [selectedSeries,setSelectedSeries]=useState(null);             // CHANGE: selected series name (e.g., "Alpha")
       const [selectedPlay,setSelectedPlay]=useState(null);                 // CHANGE: selected play object {series, playNumber}
 
-      // TABLE SORT
-      const [topSortByN,setTopSortByN]=useState(true);                     // CHANGE: allow clicking "Times Called" to sort Top 3
-      const [botSortByN,setBotSortByN]=useState(true);                     // CHANGE: allow clicking "Times Called" to sort Bottom 3
-
-      // MODE
+      // POST-GAME MODE (kept)
       const [postGameMode, setPostGameMode] = useState(false);
 
-      // CHARTS
-      const donutRef=useRef(null), donutInst=useRef(null);
-      const barRef=useRef(null), barInst=useRef(null);
+      // CHART REFS
+      const outcomeRef=useRef(null), outcomeInst=useRef(null);     // 100% stacked outcome
+      const metricsRef=useRef(null), metricsInst=useRef(null);     // Avg Points + FG% (dual axis)
+      const breakdownRef=useRef(null), breakdownInst=useRef(null); // Scoring breakdown (%)
+      const scatterRef = useRef(null), scatterInst = useRef(null); // Usage vs Success (post-game)
 
-      // Scatter chart (Usage vs Success)
-      const scatterRef = useRef(null);
-      const scatterInst = useRef(null);
-
-      // Spider (Radar) Chart
+      // RADAR (kept)
       const radarRef = useRef(null);
       const radarInst = useRef(null);
-
-      // Selected plays for radar comparison (array length 1–3)
       const [radarSelection, setRadarSelection] = useState([]);
-
-      // Reset all spider-chart state whenever series or season changes
       useEffect(() => {
         setRadarSelection([]);
         setSelectedPlay(null);
-
-        if (radarInst.current) {
-          radarInst.current.destroy();
-          radarInst.current = null;
-        }
+        if (radarInst.current) { radarInst.current.destroy(); radarInst.current = null; }
       }, [season, selectedSeries]);
 
       // Load from Firebase (live listener)
@@ -114,181 +103,284 @@
           setPlayData(snap.exists() ? snap.val() : null);
           setUpdated(new Date().toLocaleString());
           setLoading(false);
-        }, (error) => {
-          console.error("Error: ", error);
-          setLoading(false);
-        });
+        }, () => setLoading(false));
         return () => {dbRef.off('value', listener);};
       },[season]);
-
       useEffect(()=>load(),[load]);
 
-      // SERIES LIST
+      // SERIES
       const allSeries=useMemo(()=> playData?Object.keys(playData).sort():[],[playData]);
 
-      // Build flat index for stats and counts
+      // FLAT ROWS
       const flat=useMemo(()=>{
         if(!playData) return [];
         const out=[];
-        Object.keys(playData).forEach(series=>{
+        for (const series of Object.keys(playData)){
           const plays=playData[series]||{};
-          Object.keys(plays).forEach(num=>{
+          for (const num of Object.keys(plays)){
             const s=plays[num]||{};
             const n=parseInt(s.NumCalls||s.numCalls)||0;
-            if(n<=0) return;
-            // Prefer Firebase PPP if available
-            let ppp = 0;
-            if (s.PPP !== undefined && s.PPP !== null) {
-                ppp = parseFloat(s.PPP) || 0;
-            } else {
-                // fallback if PPP missing (should never happen now)
-                const pts =
-                  (s["+2"]||0)*2 +
-                  (s["+3"]||0)*3 +
-                  (s["+2F"]||0)*2 +
-                  (s["+3F"]||0)*3 +
-                  (s.FT_Made || 0);
+            if(n<=0) continue;
 
-                ppp = n ? pts / n : 0;
-            }
-            const ftAtt = s.FT_Att || 0;
-            const ftMade = s.FT_Made || 0;
-            const ftPct = ftAtt ? (ftMade / ftAtt) * 100 : 0;
+            let ppp = (s.PPP!==undefined && s.PPP!==null) ? (+s.PPP||0)
+              : n ? ( ( (+s['+2']||0)+(+s['+2F']||0) )*2 + ( (+s['+3']||0)+(+s['+3F']||0) )*3 + (+s.FT_Made||0) )/n : 0;
 
-            const ftr = s.FreeThrowRate || 0;
-            const fr = s.FoulRate || 0;
-            out.push({series,playNumber:num,n,ppp,stats:s});
-          });
-        });
+            const ftr = (s.FreeThrowRate!==undefined && s.FreeThrowRate!==null)
+              ? +s.FreeThrowRate
+              : n ? ( (+s['+2F']||0)+(+s['+3F']||0)+(+s['-2F']||0)+(+s['-3F']||0) )/n : 0;
+
+            out.push({series,playNumber:num,n,ppp,ftr,stats:s});
+          }
+        }
         return out;
       },[playData]);
 
-      // Suggest series by N (frequency)
       const seriesCounts=useMemo(()=>{
-        const map={};
-        flat.forEach(r=>{ map[r.series]=(map[r.series]||0)+r.n; });
-        return map;
+        const m={}; flat.forEach(r=> m[r.series]=(m[r.series]||0)+r.n ); return m;
       },[flat]);
 
-      const seriesSuggestions=useMemo(()=>{
-        const q=seriesQuery.trim().toLowerCase();
-        const pool=allSeries.map(s=>({series:s,total:(seriesCounts[s]||0)}));
-        const filtered=q?pool.filter(x=>x.series.toLowerCase().includes(q)):pool;
-        // CHANGE: show only first 3 rows, rest scrollable via CSS; we still compute all for height control
-        return filtered.sort((a,b)=> b.total-a.total || a.series.localeCompare(b.series));
-      },[seriesQuery,allSeries,seriesCounts]);
+      const scopeRows=useMemo(()=> selectedSeries?flat.filter(r=>r.series===selectedSeries):flat,[flat,selectedSeries]);
 
-      // TOP/BOTTOM 3 within selected series (or global if none chosen)
-      const scopeRows=useMemo(()=>{
-        const pool = selectedSeries ? flat.filter(r=>r.series===selectedSeries) : flat;
-        return pool;
-      },[flat,selectedSeries]);
+      // SORTABLE TOP 5
+      const SORTS = { N:'n', PPP:'ppp', FTR:'ftr' };
+      const [sortBy,setSortBy]=useState(SORTS.N);
+      const [sortAsc,setSortAsc]=useState(false);
+      const clickSort = (m)=> setSortBy(prev=>{
+        if(prev===m){ setSortAsc(v=>!v); return prev; }
+        setSortAsc(false); return m;
+      });
+      const glyph = (m)=> sortBy===m ? (sortAsc?'▴':'▾') : '';
 
-      const top3=useMemo(()=>{
-        const rows=[...scopeRows].sort((a,b)=> b.ppp-a.ppp || b.n-a.n).slice(0,3);
-        // allow Times Called sorting toggle (still keeps only these 3)
-        return topSortByN ? [...rows].sort((a,b)=> b.n-a.n || b.ppp-a.ppp) : rows;
-      },[scopeRows,topSortByN]);
+      const keyOf = (r)=> sortBy==='n'?r.n : sortBy==='ppp'?r.ppp : r.ftr;
+      const top5=useMemo(()=>{
+        return [...scopeRows].sort((a,b)=> sortAsc ? keyOf(a)-keyOf(b) : keyOf(b)-keyOf(a)).slice(0,5);
+      },[scopeRows,sortBy,sortAsc]);
 
-      const bottom3=useMemo(()=>{
-        const rows=[...scopeRows].sort((a,b)=> a.ppp-b.ppp || b.n-a.n).slice(0,3);
-        return botSortByN ? [...rows].sort((a,b)=> b.n-a.n || a.ppp-b.ppp) : rows;
-      },[scopeRows,botSortByN]);
+      // CLICK PLAY
+      const clickPlayRow=(r)=>{ setRadarSelection([]); setSelectedSeries(r.series); setSelectedPlay({series:r.series,playNumber:r.playNumber}); };
+      const playLabel = (r)=> `${r.series} ${r.playNumber}`;
 
-      // DETAIL CARD: either aggregate for series, or specific play
+      // AGGREGATE SERIES
+      const aggregateSeries = (seriesName) => {
+        const plays = playData?.[seriesName] || {};
+        const A = { N:0,'+2':0,'+3':0,'+2F':0,'+3F':0,'-2':0,'-3':0,'-2F':0,'-3F':0, NOTHING:0, TO:0, FOF:0 };
+        Object.values(plays).forEach(s=>{
+          const n = parseInt(s.NumCalls||s.numCalls)||0;
+          A.N += n;
+          ['+2','+3','+2F','+3F','-2','-3','-2F','-3F','NOTHING','TO'].forEach(k=> A[k]+= (+s[k]||0) );
+          A.FOF += (+s['+2F']||0)+(+s['+3F']||0)+(+s['-2F']||0)+(+s['-3F']||0);
+        });
+        const pts = 2*(A['+2']+A['+2F']) + 3*(A['+3']+A['+3F']);
+        const ppp = A.N ? pts/A.N : 0;
+        const made = A['+2']+A['+3']+A['+2F']+A['+3F'];
+        const fg  = A.N ? (made/A.N)*100 : 0;
+        return { ...A, pts, ppp, fg };
+      };
+
+      // DETAIL + SERIES AGG
       const detailStats=useMemo(()=>{
         if(!selectedSeries) return null;
         if(selectedPlay && selectedPlay.series===selectedSeries){
           return playData?.[selectedSeries]?.[selectedPlay.playNumber] || null;
         }
-        // Aggregate all plays in series
-        const playsInSeries=playData?.[selectedSeries]||{};
-        const agg={NumCalls:0,'+2':0,'+3':0,'+2F':0,'+3F':0,'-2':0,'-3':0,'-2F':0,'-3F':0,'NOTHING':0,'TO':0,FOF:0};
-        Object.keys(playsInSeries).forEach(num=>{
-          const s=playsInSeries[num]||{};
-          const n=parseInt(s.NumCalls||s.numCalls)||0;
-          agg.NumCalls+=n;
-          ['+2','+3','+2F','+3F','-2','-3','-2F','-3F','NOTHING','TO'].forEach(k=> agg[k]+= (+s[k]||0) );
-          agg.FOF+= (+s['+2F']||0)+(+s['+3F']||0)+(+s['-2F']||0)+(+s['-3F']||0);
-        });
-        return agg;
+        return aggregateSeries(selectedSeries);
       },[selectedSeries,selectedPlay,playData]);
 
-      // Heatmap data for entire series (only if series selected, no play selected)
-      const seriesHeatmap = useMemo(() => {
-        if (!selectedSeries || selectedPlay) return null;
-        if (!playData) return null;
+      const seriesAgg=useMemo(()=> selectedSeries?aggregateSeries(selectedSeries):null,[selectedSeries,playData]);
 
+      // HEADER METRICS (for charts)
+      const header=useMemo(()=>{
+        if(!detailStats) return null;
+        const n = detailStats.NumCalls!==undefined ? (parseInt(detailStats.NumCalls)||0) : detailStats.N||0;
+        const pts = (detailStats.pts!==undefined)
+          ? detailStats.pts
+          : 2*((+detailStats['+2']||0)+(+detailStats['+2F']||0)) + 3*((+detailStats['+3']||0)+(+detailStats['+3F']||0));
+        const ppp = n ? pts/n : 0;
+        const made = (+detailStats['+2']||0)+(+detailStats['+3']||0)+(+detailStats['+2F']||0)+(+detailStats['+3F']||0);
+        const fg = n ? (made/n)*100 : 0;
+        const fof = detailStats.FOF || 0;
+        return {n,ppp,fg,fof};
+      },[detailStats]);
+
+      const toPct = (num,den)=> den? 100*num/den : 0;
+
+      // ====== HEATMAP rows (Post-game; series selected; no play) ======
+      const seriesHeatmap = useMemo(() => {
+        if (!selectedSeries || selectedPlay || !playData) return null;
         const plays = playData[selectedSeries];
         if (!plays) return null;
 
         return Object.keys(plays).map(playNumber => {
           const s = plays[playNumber] || {};
-
-          // Raw values
           const counts = OUTCOME_KEYS.map(k => +s[k] || 0);
-
-          // Total occurrences for this play
           const total = counts.reduce((a, b) => a + b, 0);
-
-          // Convert to percentages (0–100)
-          const percents = total > 0
-            ? counts.map(c => (c / total) * 100)
-            : counts.map(() => 0);
-
-          return {
-            label: `${selectedSeries} ${playNumber}`,
-            raw: counts,      
-            data: percents,   
-            total
-          };
+          const percents = total > 0 ? counts.map(c => (c / total) * 100) : counts.map(() => 0);
+          return { label: `${selectedSeries} ${playNumber}`, raw: counts, data: percents, total };
         });
       }, [selectedSeries, selectedPlay, playData]);
 
-      // Usage vs Success scatter data (for selected series, only when no play selected)
-      const seriesScatter = useMemo(() => {
-        if (!selectedSeries || selectedPlay) return null;
-        if (!playData) return null;
+      // 100% STACKED OUTCOME
+      useEffect(()=>{
+        if(!detailStats || !selectedSeries || !seriesAgg || !outcomeRef.current) return;
+        if(outcomeInst.current) outcomeInst.current.destroy();
 
+        const nPlay = header.n||1;
+        const madeP = (+detailStats['+2']||0)+(+detailStats['+3']||0)+(+detailStats['+2F']||0)+(+detailStats['+3F']||0);
+        const missP = (+detailStats['-2']||0)+(+detailStats['-3']||0)+(+detailStats['-2F']||0)+(+detailStats['-3F']||0);
+        const nothingP = (+detailStats.NOTHING||0);
+        const toP = (+detailStats.TO||0);
+
+        const nSer = seriesAgg.N||1;
+        const madeS = (seriesAgg['+2']||0)+(seriesAgg['+3']||0)+(seriesAgg['+2F']||0)+(seriesAgg['+3F']||0);
+        const missS = (seriesAgg['-2']||0)+(seriesAgg['-3']||0)+(seriesAgg['-2F']||0)+(seriesAgg['-3F']||0);
+        const nothingS = (seriesAgg.NOTHING||0);
+        const toS = (seriesAgg.TO||0);
+
+        const cats=['Made FG','Miss','Nothing','Turnover'];
+        const playPct=[toPct(madeP,nPlay),toPct(missP,nPlay),toPct(nothingP,nPlay),toPct(toP,nPlay)];
+        const serPct=[toPct(madeS,nSer),toPct(missS,nSer),toPct(nothingS,nSer),toPct(toS,nSer)];
+        const colors=['#10B981','#EF4444','#6B7280','#F59E0B'];
+
+        const datasets=cats.map((c,i)=>({label:c,data:[playPct[i],serPct[i]],backgroundColor:colors[i],stack:'100'}));
+
+        outcomeInst.current=new Chart(outcomeRef.current.getContext('2d'),{
+          type:'bar',
+          data:{labels:['Play','Series Avg'],datasets},
+          options:{
+            indexAxis:'y',
+            responsive:true,maintainAspectRatio:false,
+            scales:{
+              x:{stacked:true,beginAtZero:true,max:100,ticks:{callback:v=>`${v}%`,color:dark?'#9CA3AF':'#6B7280'},grid:{color:dark?'#374151':'#E5E7EB'}},
+              y:{stacked:true,ticks:{color:dark?'#9CA3AF':'#6B7280'},grid:{display:false}}
+            },
+            plugins:{legend:{position:'bottom',labels:{color:dark?'#fff':'#374151'}},
+                     tooltip:{callbacks:{label:(c)=>`${c.dataset.label}: ${c.formattedValue}%`}}}
+          }
+        });
+      },[detailStats,seriesAgg,selectedSeries,selectedPlay,dark,header]);
+
+      // METRICS: PPP + FG% (dual axis)
+      useEffect(() => {
+        if (!detailStats || !selectedSeries || !seriesAgg || !metricsRef.current) return;
+        if (metricsInst.current) metricsInst.current.destroy();
+
+        const playPts   = header.ppp || 0;
+        const seriesPts = seriesAgg.ppp || 0;
+        const playFG    = header.fg || 0;
+        const seriesFG  = seriesAgg.fg || 0;
+
+        const BENCH = 0.95;
+        const ptsColors = [
+          playPts >= BENCH ? '#10B981' : '#EF4444',
+          seriesPts >= BENCH ? '#10B981' : '#EF4444'
+        ];
+        const fgColors = ['#60A5FA', '#94A3B8'];
+
+        metricsInst.current = new Chart(metricsRef.current.getContext('2d'), {
+          type: 'bar',
+          data: {
+            labels: ['Play', 'Series Avg'],
+            datasets: [
+              { label: 'Avg Points', data: [playPts, seriesPts], backgroundColor: [VT_PURPLE, VT_PINK], yAxisID: 'yPts' },
+              { label: 'FG %',       data: [playFG, seriesFG],   backgroundColor: [VT_PINK, VT_PURPLE], yAxisID: 'yFg'  }
+            ]
+          },
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: {
+              legend: { position: 'bottom', labels: { color: dark ? '#ffffff' : '#374151' } },
+              tooltip: {
+                callbacks: {
+                  label: ctx => ctx.dataset.label === 'FG %'
+                    ? `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}%`
+                    : `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(2)}`
+                }
+              }
+            },
+            scales: {
+              x: { ticks: { color: dark ? '#9CA3AF' : '#374151' }, grid: { color: dark ? '#374151' : '#E5E7EB' } },
+              yPts: {
+                position: 'left', min: 0, max: 2.0,
+                title: { display: true, text: 'Avg Points (PPP)', color: dark ? '#ffffff' : '#111827' },
+                ticks: { color: dark ? '#9CA3AF' : '#374151' },
+                grid: { color: dark ? '#374151' : '#E5E7EB' }
+              },
+              yFg: {
+                position: 'right', min: 0, max: 100,
+                title: { display: true, text: 'FG %', color: dark ? '#ffffff' : '#111827' },
+                ticks: { callback: v => `${v}%`, color: dark ? '#9CA3AF' : '#374151' },
+                grid: { drawOnChartArea: false }
+              }
+            }
+          }
+        });
+      }, [detailStats, selectedSeries, seriesAgg, header, dark]);
+
+      // SCORING BREAKDOWN (%)
+      useEffect(()=>{
+        if(!detailStats || !selectedSeries || !seriesAgg || !breakdownRef.current) return;
+        if(breakdownInst.current) breakdownInst.current.destroy();
+
+        const nPlay=header.n||1;
+        const valsPlayPct=[
+          toPct(+detailStats['+3']||0,nPlay),
+          toPct(+detailStats['+2']||0,nPlay),
+          toPct((+detailStats['-2']||0)+(+detailStats['-3']||0),nPlay),
+          toPct(+detailStats['+3F']||0,nPlay),
+          toPct(+detailStats['+2F']||0,nPlay),
+          toPct((+detailStats['-2F']||0)+(+detailStats['-3F']||0),nPlay)
+        ];
+
+        const nSer=seriesAgg.N||1;
+        const valsSerPct=[
+          toPct(seriesAgg['+3']||0,nSer),
+          toPct(seriesAgg['+2']||0,nSer),
+          toPct((seriesAgg['-2']||0)+(seriesAgg['-3']||0),nSer),
+          toPct(seriesAgg['+3F']||0,nSer),
+          toPct(seriesAgg['+2F']||0,nSer),
+          toPct((seriesAgg['-2F']||0)+(seriesAgg['-3F']||0),nSer)
+        ];
+
+        breakdownInst.current=new Chart(breakdownRef.current.getContext('2d'),{
+          type:'bar',
+          data:{labels:['3pt','2pt','No Score','3pt+Foul','2pt+Foul','Miss+Foul'],
+                datasets:[
+                  {label:selectedPlay?`${selectedSeries} ${selectedPlay.playNumber}`:`${selectedSeries}`,data:valsPlayPct,
+                  backgroundColor: VT_PURPLE
+                  },
+                  {
+                    label:'Series Avg',data:valsSerPct,
+                  backgroundColor: VT_PINK}
+                ]},
+          options:{
+            responsive:true,maintainAspectRatio:false,
+            plugins:{legend:{position:'bottom',labels:{color:dark?'#fff':'#374151'}},
+                     tooltip:{callbacks:{label:(c)=>`${c.dataset.label}: ${c.formattedValue}%`}}},
+            scales:{
+              y:{beginAtZero:true,max:100,ticks:{callback:v=>`${v}%`,color:dark?'#9CA3AF':'#6B7280'},grid:{color:dark?'#374151':'#E5E7EB'}},
+              x:{ticks:{color:dark?'#9CA3AF':'#6B7280'},grid:{color:dark?'#374151':'#E5E7EB'}}
+            }
+          }
+        });
+      },[detailStats,selectedSeries,selectedPlay,dark,header,seriesAgg]);
+
+      // POST-GAME SCATTER (kept)
+      const seriesScatter = useMemo(() => {
+        if (!selectedSeries || selectedPlay || !playData) return null;
         const plays = playData[selectedSeries];
         if (!plays) return null;
-
         return Object.keys(plays).map(playNumber => {
           const s = plays[playNumber] || {};
           const n = parseInt(s.NumCalls || s.numCalls) || 0;
-
-          const points =
-            (+s["+2"] || 0) * 2 +
-            (+s["+3"] || 0) * 3 +
-            (+s["+2F"] || 0) * 2 +
-            (+s["+3F"] || 0) * 3;
-
-          const ppp = n ? points / n : 0;
-
-          return {
-            label: `${selectedSeries} ${playNumber}`,
-            x: n,
-            y: ppp
-          };
+          const pts = 2*((+s['+2']||0)+(+s['+2F']||0)) + 3*((+s['+3']||0)+(+s['+3F']||0));
+          const ppp = n ? pts / n : 0;
+          return { label: `${selectedSeries} ${playNumber}`, x: n, y: ppp };
         });
       }, [selectedSeries, selectedPlay, playData]);
 
-      const header=useMemo(()=>{
-        if(!detailStats) return null;
-        const n=parseInt(detailStats.NumCalls)||1;
-        const pts=(+detailStats['+2']||0)*2+(+detailStats['+3']||0)*3+(+detailStats['+2F']||0)*2+(+detailStats['+3F']||0)*3;
-        const ppp=n?pts/n:0;
-        const made=['+2','+3','+2F','+3F'].reduce((s,k)=>s+(+detailStats[k]||0),0);
-        const fg=n?(made/n)*100:0;
-        return {n,ppp,fg,fof:detailStats.FOF||0};
-      },[detailStats]);
-
-      // Scatterplot: Usage (N) vs Success (PPP)
       useEffect(() => {
         if (!seriesScatter || !scatterRef.current) return;
-
         if (scatterInst.current) scatterInst.current.destroy();
-
         scatterInst.current = new Chart(scatterRef.current.getContext("2d"), {
           type: "scatter",
           data: {
@@ -306,17 +398,7 @@
           options: {
             responsive: true,
             maintainAspectRatio: false,
-            plugins: {
-              legend: { display: false },
-              tooltip: {
-                callbacks: {
-                  label: (ctx) => {
-                    const p = seriesScatter[ctx.dataIndex];
-                    return `${p.label}: N=${p.x}, PPP=${p.y.toFixed(2)}`;
-                  }
-                }
-              }
-            },
+            plugins: { legend: { display: false } },
             scales: {
               x: {
                 title: { display: true, text: "Times Called (N)", color: dark ? "#f9fafb" : "#111827" },
@@ -334,109 +416,65 @@
         });
       }, [seriesScatter, dark, postGameMode]);
 
-      // Charts
-      useEffect(()=>{
-        if(!detailStats || !donutRef.current) return;
-        if(donutInst.current) donutInst.current.destroy();
-        const total=parseInt(detailStats.NumCalls)||1;
-        const made=['+2','+3','+2F','+3F'].reduce((s,k)=>s+(+detailStats[k]||0),0);
-        const missTo=['-2','-3','-2F','-3F'].reduce((s,k)=>s+(+detailStats[k]||0),0);
-        const nothing=+detailStats.NOTHING||0;
-        const to=+detailStats.TO||0;
-        donutInst.current=new Chart(donutRef.current.getContext('2d'),{
-          type:'doughnut',
-          data:{labels:['Made FG','Miss/TO','Nothing','Turnover'],
-                datasets:[{data:[made,missTo,nothing,to],
-                           backgroundColor:['#10B981','#EF4444','#6B7280','#F59E0B']}]},
-          options:{responsive:true,maintainAspectRatio:false,
-            plugins:{legend:{position:'bottom',labels:{color:dark?'#fff':'#374151',padding:12}}}}
-        });
-      },[detailStats,dark]);
+      // RADAR (kept)
+      function buildRadarStats(s, playNumberLabel = "") {
+        const n = parseInt(s.NumCalls || s.numCalls) || 1;
+        const made = ['+2','+3','+2F','+3F'].reduce((sum, k) => sum + (+s[k] || 0), 0);
+        const misses = ['-2','-3','-2F','-3F'].reduce((sum, k) => sum + (+s[k] || 0), 0);
+        const to = +s.TO || 0;
+        const fg = n ? made / n : 0;
+        const ftr = s.FreeThrowRate !== undefined ? +s.FreeThrowRate : 0;
+        const pts = (+s["+2"]||0)*2 + (+s["+3"]||0)*3 + (+s["+2F"]||0)*2 + (+s["+3F"]||0)*3;
+        const ppp = n ? pts / n : 0;
+        const mtor = n ? (misses + to) / n : 0;
+        const mtorInv = 1 - mtor;
+        const pppNorm = Math.min(ppp / 3, 1);
+        return { label: playNumberLabel, values: [fg, ftr, pppNorm, mtorInv], real: { fg, ftr, ppp, mtorInv } };
+      }
 
       useEffect(() => {
         if (!radarRef.current) return;
-
-        // If no data exists for this series, nuke the chart and stop
         if (!selectedSeries || !playData || !playData[selectedSeries]) {
-          if (radarInst.current) {
-            radarInst.current.destroy();
-            radarInst.current = null;
-          }
+          if (radarInst.current) { radarInst.current.destroy(); radarInst.current = null; }
           return;
         }
-
-        const labels = ["FG%", "Free Throw Rate", "PPP", "Miss/TO"];
+        const labels = ["FG%", "Free Throw Rate", "PPP", "Miss"];
         const datasets = [];
 
-        // ----- CASE 1: Single play selected -----
         if (selectedPlay) {
           const s = playData[selectedSeries][selectedPlay.playNumber];
-
-          if (!s) {
-            if (radarInst.current) {
-              radarInst.current.destroy();
-              radarInst.current = null;
-            }
-            return;
-          }
-
+          if (!s) { if (radarInst.current) { radarInst.current.destroy(); radarInst.current = null; } return; }
           const out = buildRadarStats(s, `${selectedSeries} ${selectedPlay.playNumber}`);
           datasets.push({
-            label: out.label,
-            data: out.values,
-            realValues: out.real,
-            fill: true,
-            backgroundColor: "rgba(59,130,246,0.3)",
-            borderColor: "#3B82F6",
+            label: out.label, data: out.values, realValues: out.real,
+            fill: true, backgroundColor: "rgba(59,130,246,0.3)", borderColor: "#3B82F6",
           });
-        }
-
-        // ----- CASE 2: Comparison mode -----
-        else if (radarSelection.length > 0) {
+        } else if (radarSelection.length > 0) {
           const COLORS = ["#3B82F6", "#10B981", "#F59E0B"];
-
           radarSelection.forEach((num, i) => {
-            const s = playData[selectedSeries][num];
-            if (!s) return; // skip invalid entries
-
+            const s = playData[selectedSeries][num]; if (!s) return;
             const out = buildRadarStats(s, `${selectedSeries} ${num}`);
             const C = COLORS[i % COLORS.length];
-
             datasets.push({
-              label: out.label,
-              data: out.values,
-              realValues: out.real,
-              fill: true,
-              backgroundColor: C + "40",
-              borderColor: C,
+              label: out.label, data: out.values, realValues: out.real,
+              fill: true, backgroundColor: C + "40", borderColor: C,
             });
           });
         }
 
-        if (datasets.length === 0) {
-          if (radarInst.current) radarInst.current.destroy();
-          radarInst.current = null;
-          return;
-        }
-
+        if (datasets.length === 0) { if (radarInst.current) radarInst.current.destroy(); radarInst.current = null; return; }
         if (radarInst.current) radarInst.current.destroy();
 
         radarInst.current = new Chart(radarRef.current, {
           type: "radar",
           data: { labels, datasets },
           options: {
-            responsive: true,
-            maintainAspectRatio: false,
+            responsive: true, maintainAspectRatio: false,
             scales: {
               r: {
-                min: 0,
-                max: 1,
-                ticks: { display: false },
+                min: 0, max: 1, ticks: { display: false },
                 grid: { color: dark ? "#4B5563" : "#D1D5DB" },
-                pointLabels: {
-                  color: dark ? "#f9fafb" : "#111827",
-                  font: { size: 12 },
-                },
+                pointLabels: { color: dark ? "#f9fafb" : "#111827", font: { size: 12 } },
               },
             },
             plugins: {
@@ -444,14 +482,12 @@
               tooltip: {
                 callbacks: {
                   label: (ctx) => {
-                    const real = ctx.dataset.realValues;
-                    const metric = ctx.label;
-
+                    const real = ctx.dataset.realValues; const metric = ctx.label;
                     switch (metric) {
                       case "FG%": return `FG%: ${(real.fg*100).toFixed(1)}%`;
                       case "Free Throw Rate": return `Free Throw Rate: ${(real.ftr*100).toFixed(1)}%`;
                       case "PPP": return `PPP: ${real.ppp.toFixed(2)}`;
-                      case "Miss/TO": return `Miss/TO Rate: ${((1-real.mtorInv)*100).toFixed(1)}%`;
+                      case "Miss": return `Miss Rate: ${((1-real.mtorInv)*100).toFixed(1)}%`;
                       default: return "";
                     }
                   }
@@ -460,83 +496,15 @@
             }
           }
         });
-}, [selectedSeries, selectedPlay, radarSelection, playData, dark]);
+      }, [selectedSeries, selectedPlay, radarSelection, playData, dark]);
 
-
-
-      useEffect(()=>{
-        if(!detailStats || !barRef.current) return;
-        if(barInst.current) barInst.current.destroy();
-        const vals=[
-          +detailStats['+3']||0,
-          +detailStats['+2']||0,
-          (+detailStats['-2']||0)+(+detailStats['-3']||0),
-          +detailStats['+3F']||0,
-          +detailStats['+2F']||0,
-          (+detailStats['-2F']||0)+(+detailStats['-3F']||0)
-        ];
-        barInst.current=new Chart(barRef.current.getContext('2d'),{
-          type:'bar',
-          data:{labels:['3pt','2pt','No Score','3pt+Foul','2pt+Foul','Miss+Foul'],
-                datasets:[{label:'Occurrences',data:vals,backgroundColor:'#3B82F6'}]},
-          options:{responsive:true,maintainAspectRatio:false,
-            scales:{y:{beginAtZero:true,ticks:{color:dark?'#9CA3AF':'#6B7280'},grid:{color:dark?'#374151':'#E5E7EB'}},
-                    x:{ticks:{color:dark?'#9CA3AF':'#6B7280'},grid:{color:dark?'#374151':'#E5E7EB'}}},
-            plugins:{legend:{display:false}}}
-        });
-      },[detailStats,dark]);
-
-      function buildRadarStats(s, playNumberLabel = "") {
-        const n = parseInt(s.NumCalls || s.numCalls) || 1;
-
-        const made = ['+2','+3','+2F','+3F'].reduce((sum, k) => sum + (+s[k] || 0), 0);
-        const misses = ['-2','-3','-2F','-3F'].reduce((sum, k) => sum + (+s[k] || 0), 0);
-        const to = +s.TO || 0;
-
-        const fg = n ? made / n : 0;
-
-        const ftr = s.FreeThrowRate !== undefined ? +s.FreeThrowRate : 0;
-
-        const pts =
-          (+s["+2"] || 0) * 2 +
-          (+s["+3"] || 0) * 3 +
-          (+s["+2F"] || 0) * 2 +
-          (+s["+3F"] || 0) * 3;
-
-        const ppp = n ? pts / n : 0;
-
-        const mtor = n ? (misses + to) / n : 0;
-        const mtorInv = 1 - mtor;
-
-        // Normalize PPP (0–3 -> 0–1)
-        const pppNorm = Math.min(ppp / 3, 1);
-
-        return {
-          label: playNumberLabel,
-          values: [fg, ftr, pppNorm, mtorInv],
-          real: { fg, ftr, ppp, mtorInv }
-        };
-      }
-
-
-      // Helpers
-      const playLabel = (r)=> `${r.series} ${r.playNumber}`;               // CHANGE: no dashes anywhere
-
-      const clickPlayRow=(r)=>{
-        // CHANGE: keep current series context; only set play within that series
-        setRadarSelection([]);
-        setSelectedSeries(r.series);
-        setSelectedPlay({series:r.series,playNumber:r.playNumber});
-      };
-
-      const clearDetail=()=>{
-        setSelectedPlay(null);
-        setSelectedSeries(null);
-      };
+      // HELPERS
+      const pppColor = (v)=> v>=0.95 ? 'text-green-400' : 'text-red-400';
+      const clearDetail=()=>{ setSelectedPlay(null); setSelectedSeries(null); };
 
       return (
         <div className="max-w-7xl mx-auto p-4">
-          {/* ===== HEADER with Live pill restored ===== */}
+          {/* HEADER */}
           <div className={`rounded-lg shadow p-4 mb-6 ${dark?'bg-gray-800':'bg-white'}`}>
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
               <div className="flex items-center gap-3">
@@ -549,7 +517,6 @@
                   <option value="2024">Season 2024</option>
                   <option value="2025">Season 2025</option>
                 </select>
-                {/* CHANGE: Live pill (visual) */}
                 <button type="button" className="flex items-center gap-2 px-3 py-2 rounded text-white bg-green-600 hover:bg-green-700 shadow">
                   <span className="w-2 h-2 rounded-full bg-green-300 animate-pulse" />
                   Live
@@ -558,13 +525,7 @@
                         className={`px-3 py-2 rounded ${dark?'bg-gray-700 text-white hover:bg-gray-600':'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>{dark?'☀️ Light':'🌙 Dark'}</button>
                 <button
                   onClick={() => setPostGameMode(m => !m)}
-                  className={`px-3 py-2 rounded shadow ${
-                    // postGameMode
-                    //  ? 'bg-blue-600 text-white hover:bg-blue-700'
-                    dark
-                      ? 'bg-gray-700 text-white hover:bg-gray-600'
-                      : 'bg-gray-200 text-gray-900 hover:bg-gray-300'
-                  }`}
+                  className={`px-3 py-2 rounded shadow ${dark ? 'bg-gray-700 text-white hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}
                 >
                   {postGameMode ? 'In-Game Mode' : 'Post-Game Mode'}
                 </button>
@@ -578,7 +539,7 @@
             )}
           </div>
 
-          {/* Loading skeleton */}
+          {/* LOADING */}
           {loading && (
             <div className="animate-pulse space-y-4">
               <div className="h-16 bg-gray-300 rounded"></div>
@@ -589,7 +550,7 @@
 
           {!loading && (
             <>
-              {/* ===== Series-only Search ===== */}
+              {/* SERIES SEARCH */}
               <div className={`rounded-lg shadow p-4 mb-4 ${dark?'bg-gray-800':'bg-white'}`}>
                 <label className="text-sm block mb-1">Search series (e.g., <span className="opacity-80">Alpha</span> or <span className="opacity-80">November</span>)</label>
                 <input
@@ -599,91 +560,62 @@
                   placeholder="Start typing…"
                   className={`w-full px-3 py-2 rounded border ${dark?'bg-gray-700 border-gray-600 text-white placeholder-gray-400':'bg-white border-gray-300'}`}
                 />
-                {/* CHANGE: dropdown shows only series names, first 3 visible then scrollable */}
                 <div className={`mt-2 rounded-lg border ${dark?'border-gray-700':'border-gray-300'} max-h-40 overflow-y-auto`}>
-                  {seriesSuggestions.length===0 && (
-                    <div className={`px-3 py-2 text-sm ${dark?'text-gray-300':'text-gray-600'}`}>No matches.</div>
-                  )}
-                  {seriesSuggestions.map((s,idx)=>(
-                    <div key={idx}
-                      className={`suggestion px-3 py-2 flex items-center justify-between ${dark?'hover:bg-gray-800':'hover:bg-gray-100'}`}
-                      onClick={()=>{ setSelectedSeries(s.series); setSelectedPlay(null); setSeriesQuery(s.series); }}>
-                      <div className="font-medium">{s.series}</div>
-                      <div className="text-xs opacity-75">N={s.total}</div>
-                    </div>
-                  ))}
+                  {allSeries
+                    .filter(s=>!seriesQuery || s.toLowerCase().includes(seriesQuery.toLowerCase()))
+                    .sort((a,b)=>(seriesCounts[b]||0)-(seriesCounts[a]||0))
+                    .map((s,idx)=>(
+                      <div key={idx}
+                        className={`suggestion px-3 py-2 flex items-center justify-between ${dark?'hover:bg-gray-800':'hover:bg-gray-100'}`}
+                        onClick={()=>{ setSelectedSeries(s); setSelectedPlay(null); setSeriesQuery(s); }}>
+                        <div className="font-medium">{s}</div>
+                        <div className="text-xs opacity-75">N={seriesCounts[s]||0}</div>
+                      </div>
+                    ))}
                 </div>
               </div>
 
-              {/* ===== Top/Bottom 3 tables ===== */}
-              <div className="grid lg:grid-cols-2 gap-4 mb-6">
-                <div className={`rounded-lg shadow p-4 ${dark?'bg-gray-800':'bg-white'}`}>
-                  <div className="flex items-center justify-between mb-2">
-                    <h2 className="text-lg font-bold">Top 3 by Points/Play</h2>
-                    <span className="text-xs opacity-70">{selectedSeries ?? 'All Series'}</span>
-                  </div>
-                  <table className="tbl w-full">
-                    <thead className={`${dark?'bg-gray-900 text-gray-200':'bg-gray-100 text-gray-700'}`}>
-                      <tr>
-                        <th className="text-left">Play</th>
-                        {/* CHANGE: center-align numbers; make header clickable to toggle sort */}
-                        <th className="text-center cursor-pointer select-none" onClick={()=>setTopSortByN(v=>!v)}>
-                          Times Called {topSortByN? '▾':'▴'}
-                        </th>
-                        <th className="text-right">Pts/Play</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {top3.length===0 && (<tr><td colSpan="3" className="py-3 text-sm opacity-70">No plays.</td></tr>)}
-                      {top3.map((r,i)=>(
-                        <tr key={`t-${i}`} className={`${dark?'hover:bg-gray-800':'hover:bg-gray-100'} cursor-pointer`} onClick={()=>clickPlayRow(r)}>
-                          <td className="font-medium">{playLabel(r)}</td>
-                          <td className="text-center">{r.n}</td>
-                          <td className="text-right font-semibold text-green-400">{r.ppp.toFixed(2)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+              {/* TOP 5 TABLE with sortable headers */}
+              <div className={`rounded-lg shadow p-4 mb-6 ${dark?'bg-gray-800':'bg-white'}`}>
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="text-lg font-bold">Top 5 Plays</h2>
+                  <span className="text-xs opacity-70">{selectedSeries ?? 'All Series'}</span>
                 </div>
-
-                <div className={`rounded-lg shadow p-4 ${dark?'bg-gray-800':'bg-white'}`}>
-                  <div className="flex items-center justify-between mb-2">
-                    <h2 className="text-lg font-bold">Bottom 3 by Points/Play</h2>
-                    <span className="text-xs opacity-70">{selectedSeries ?? 'All Series'}</span>
-                  </div>
-                  <table className="tbl w-full">
-                    <thead className={`${dark?'bg-gray-900 text-gray-200':'bg-gray-100 text-gray-700'}`}>
-                      <tr>
-                        <th className="text-left">Play</th>
-                        {/* CHANGE: center-align numbers; header toggles sort */}
-                        <th className="text-center cursor-pointer select-none" onClick={()=>setBotSortByN(v=>!v)}>
-                          Times Called {botSortByN? '▾':'▴'}
-                        </th>
-                        <th className="text-right">Pts/Play</th>
+                <table className="tbl w-full">
+                  <thead className={`${dark?'bg-gray-900 text-gray-200':'bg-gray-100 text-gray-700'}`}>
+                    <tr>
+                      <th className="text-left">Play</th>
+                      <th className="text-center cursor-pointer select-none" onClick={()=>clickSort(SORTS.N)}>
+                        Times Called {glyph(SORTS.N)}
+                      </th>
+                      <th className="text-center cursor-pointer select-none" onClick={()=>clickSort(SORTS.PPP)}>
+                        Pts/Play {glyph(SORTS.PPP)}
+                      </th>
+                      <th className="text-center cursor-pointer select-none" onClick={()=>clickSort(SORTS.FTR)}>
+                        FT Rate {glyph(SORTS.FTR)}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {top5.length===0 && (<tr><td colSpan="4" className="py-3 text-sm opacity-70">No plays.</td></tr>)}
+                    {top5.map((r,i)=>(
+                      <tr key={`t-${i}`} className={`${dark?'hover:bg-gray-800':'hover:bg-gray-100'} cursor-pointer`} onClick={()=>clickPlayRow(r)}>
+                        <td className="font-medium">{playLabel(r)}</td>
+                        <td className="text-center">{r.n}</td>
+                        <td className={`text-center font-semibold ${pppColor(r.ppp)}`}>{r.ppp.toFixed(2)}</td>
+                        <td className="text-center">{r.ftr.toFixed(2)}</td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {bottom3.length===0 && (<tr><td colSpan="3" className="py-3 text-sm opacity-70">No plays.</td></tr>)}
-                      {bottom3.map((r,i)=>(
-                        <tr key={`b-${i}`} className={`${dark?'hover:bg-gray-800':'hover:bg-gray-100'} cursor-pointer`} onClick={()=>clickPlayRow(r)}>
-                          <td className="font-medium">{playLabel(r)}</td>
-                          <td className="text-center">{r.n}</td>
-                          <td className="text-right font-semibold text-red-400">{r.ppp.toFixed(2)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                    ))}
+                  </tbody>
+                </table>
               </div>
 
-              {/* Series Heatmap (shown only when a series is selected AND no play is selected) */}
+              {/* ===== HEATMAP (post-game; series selected; no play) ===== */}
               {postGameMode && selectedSeries && !selectedPlay && seriesHeatmap && (
                 <div className={`rounded-lg shadow p-6 mb-6 ${dark ? 'bg-gray-800' : 'bg-white'}`}>
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-lg font-bold">Outcome Heatmap — {selectedSeries}</h3>
-                    <span className="text-xs opacity-70">
-                      {seriesHeatmap.length} plays
-                    </span>
+                    <span className="text-xs opacity-70">{seriesHeatmap.length} plays</span>
                   </div>
 
                   <div className="overflow-x-auto">
@@ -696,16 +628,13 @@
                           ))}
                         </tr>
                       </thead>
-
                       <tbody>
                         {seriesHeatmap.map((row, i) => (
                           <tr key={i} className={`${dark ? 'hover:bg-gray-800' : 'hover:bg-gray-100'}`}>
                             <td className="font-medium">{row.label}</td>
-
                             {row.data.map((val, j) => {
                               const intensity = val / 100;
                               const bg = `rgba(59,130,246,${intensity})`;
-
                               return (
                                 <td
                                   key={j}
@@ -713,8 +642,7 @@
                                   style={{
                                     backgroundColor: bg,
                                     color: intensity > 0.5 ? 'white' : (dark ? '#f9fafb' : '#111827'),
-                                    fontWeight: '500',
-                                    padding: '.5rem'
+                                    fontWeight: '500', padding: '.5rem'
                                   }}
                                 >
                                   {val.toFixed(0)}%
@@ -729,127 +657,88 @@
                 </div>
               )}
 
-              {/* Usage vs Success Scatterplot (series selected, no play selected) */}
-              {postGameMode && selectedSeries && !selectedPlay && seriesScatter && (
+              {/* POST-GAME SCATTER (kept) */}
+              {postGameMode && selectedSeries && !selectedPlay && (
                 <div className={`rounded-lg shadow p-6 mb-6 ${dark ? 'bg-gray-800' : 'bg-white'}`}>
                   <h3 className="text-lg font-bold mb-4">Usage vs Success — {selectedSeries}</h3>
-
                   <div style={{ height: "320px" }}>
                     <canvas ref={scatterRef}></canvas>
                   </div>
                 </div>
               )}
 
-              {/* ===== Detail card ===== */}
-              {(selectedSeries && detailStats && header) && (
+              {/* DETAIL CARD + RADAR (kept) */}
+              {(selectedSeries && detailStats && header && seriesAgg) && (
                 <div className={`rounded-lg shadow p-6 ${dark?'bg-gray-800':'bg-white'}`}>
                   <div className="flex items-center justify-between mb-4">
-                    {/* CHANGE: Title shows either "Alpha 7" or "Alpha" (no dashes, no '(All Plays)') */}
                     <h3 className="text-lg font-bold">
                       {selectedPlay ? `${selectedSeries} ${selectedPlay.playNumber}` : `${selectedSeries}`}
                     </h3>
                     <button className={`pill ${dark?'bg-gray-700':'bg-gray-200'}`} onClick={clearDetail}>Clear</button>
                   </div>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+
+                  {/* Outcome stacked + Metrics dual bar */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                     <div>
-                      <div className="text-sm opacity-75">Avg Points</div>
-                      <div className={`text-2xl font-bold ${header.ppp>1.15?'text-green-500':header.ppp<0.95?'text-red-500':'text-blue-500'}`}>{header.ppp.toFixed(2)}</div>
+                      <div className="text-sm font-semibold mb-2">Outcome Distribution — Play vs Series Avg (100% stacked)</div>
+                      <div style={{height:'260px'}}><canvas ref={outcomeRef}></canvas></div>
                     </div>
                     <div>
-                      <div className="text-sm opacity-75">Times Called</div>
-                      {/* CHANGE: center in table already; here we keep big number */}
-                      <div className="text-2xl font-bold">{header.n}</div>
-                    </div>
-                    <div>
-                      <div className="text-sm opacity-75">FG %</div>
-                      <div className={`text-2xl font-bold ${header.fg>43?'text-green-500':header.fg<37?'text-red-500':'text-blue-500'}`}>{header.fg.toFixed(1)}%</div>
-                    </div>
-                    <div>
-                      <div className="text-sm opacity-75">Fouls on FGs</div>
-                      <div className="text-2xl font-bold">{header.fof}</div>
+                      <div className="text-sm font-semibold mb-2">Avg Points &amp; FG% — Play vs Series Avg</div>
+                      <div style={{height:'260px'}}><canvas ref={metricsRef}></canvas></div>
                     </div>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <div className="text-sm font-semibold mb-2">Outcome Distribution</div>
-                      <div style={{height:'260px'}}><canvas ref={donutRef}></canvas></div>
-                    </div>
-                    <div>
-                      <div className="text-sm font-semibold mb-2">Scoring Breakdown</div>
-                      <div style={{height:'260px'}}><canvas ref={barRef}></canvas></div>
-                    </div>
+
+                  {/* Scoring breakdown (%) */}
+                  <div className="mb-8">
+                    <div className="text-sm font-semibold mb-2">Scoring Breakdown (Percent) — Play vs Series Avg</div>
+                    <div style={{height:'260px'}}><canvas ref={breakdownRef}></canvas></div>
                   </div>
-                </div>
-              )}
-              {/* ===== Combined Play Selection + Radar Section ===== */}
-              {selectedSeries && (selectedPlay || !selectedPlay) && (
-                <div
-                  className={`rounded-lg shadow p-6 mt-6 ${
-                    dark ? 'bg-gray-800' : 'bg-white'
-                  }`}
-                  style={{ minHeight: "480px" }}
-                >
-                  <h3 className="text-lg font-bold mb-4">Play Profile</h3>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    
-                    {/* LEFT — Play Selector */}
-                    <div>
-                      {!selectedPlay && (
-                        <>
-                          <label className="text-sm opacity-75 block mb-2">
-                            Compare plays (select up to 3)
-                          </label>
-
-                          <div className="space-y-2">
-                            {Object.keys(playData[selectedSeries]).map(num => {
-                              const label = `${selectedSeries} ${num}`;
-                              const selected = radarSelection.includes(num);
-
-                              return (
-                                <button
-                                  key={num}
-                                  onClick={() => {
-                                    // Toggle logic
-                                    if (selected) {
-                                      // Remove
-                                      setRadarSelection(radarSelection.filter(x => x !== num));
-                                    } else {
-                                      // Add (max 3)
-                                      if (radarSelection.length < 3) {
-                                        setRadarSelection([...radarSelection, num]);
-                                      }
-                                    }
-                                  }}
-                                  className={`w-full px-3 py-2 rounded text-left border ${
-                                    selected
-                                      ? (dark ? "bg-blue-600 border-blue-500 text-white" : "bg-blue-100 border-blue-400 text-blue-900")
-                                      : (dark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300 text-gray-900")
-                                  }`}
-                                >
-                                  {label}
-                                </button>
-                              );
-                            })}
+                  {/* Play Profile (Radar compare plays) */}
+                  <div className="rounded-lg mt-6" style={{ minHeight: "480px" }}>
+                    <h3 className="text-lg font-bold mb-4">Play Profile</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        {!selectedPlay && (
+                          <>
+                            <label className="text-sm opacity-75 block mb-2">Compare plays (select up to 3)</label>
+                            <div className="space-y-2">
+                              {Object.keys(playData[selectedSeries]).map(num => {
+                                const label = `${selectedSeries} ${num}`;
+                                const selected = radarSelection.includes(num);
+                                return (
+                                  <button
+                                    key={num}
+                                    onClick={() => {
+                                      if (selected) setRadarSelection(radarSelection.filter(x => x !== num));
+                                      else if (radarSelection.length < 3) setRadarSelection([...radarSelection, num]);
+                                    }}
+                                    className={`w-full px-3 py-2 rounded text-left border ${
+                                      selected
+                                        ? (dark ? "bg-blue-600 border-blue-500 text-white" : "bg-blue-100 border-blue-400 text-blue-900")
+                                        : (dark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300 text-gray-900")
+                                    }`}
+                                  >
+                                    {label}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </>
+                        )}
+                        {selectedPlay && (
+                          <div className="text-sm opacity-75">
+                            Showing radar for: <strong>{selectedSeries} {selectedPlay.playNumber}</strong>
                           </div>
-
-                        </>
-                      )}
-
-                      {selectedPlay && (
-                        <div className="text-sm opacity-75">
-                          Showing radar for: <strong>{selectedSeries} {selectedPlay.playNumber}</strong>
+                        )}
+                      </div>
+                      <div className="flex justify-center">
+                        <div style={{ height: "540px", width: "540px" }}>
+                          <canvas ref={radarRef}></canvas>
                         </div>
-                      )}
-                    </div>
-
-                    {/* RIGHT — Radar Chart */}
-                    <div className="flex justify-center">
-                      <div style={{ height: "540px", width: "540px" }}>
-                        <canvas ref={radarRef}></canvas>
                       </div>
                     </div>
-
                   </div>
                 </div>
               )}
