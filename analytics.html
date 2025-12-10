@@ -87,7 +87,8 @@
 
       // CHART REFS
       const outcomeRef=useRef(null), outcomeInst=useRef(null);     // 100% stacked outcome
-      const metricsRef=useRef(null), metricsInst=useRef(null);     // Avg Points + FG% (dual axis)
+      const pppRef=useRef(null), pppInst=useRef(null);           // PPP Graph
+      const fgRef=useRef(null), fgInst=useRef(null);           // FG% Graph
       const breakdownRef=useRef(null), breakdownInst=useRef(null); // Scoring breakdown (%)
       const scatterRef = useRef(null), scatterInst = useRef(null); // Usage vs Success (post-game)
 
@@ -453,6 +454,13 @@
         return ["Series", "All Plays"];
       }, [selectedPlay]);
 
+      const comparisonColors = useMemo(() => {
+        if (selectedPlay) {
+            return [VT_PURPLE, VT_PINK];
+        }
+        return [VT_PURPLE, VT_PINK];
+      }, [selectedPlay]);
+
 
       const toPct = (num,den)=> den? 100*num/den : 0;
       
@@ -522,24 +530,26 @@
         const missP = (+detailStats['-2']||0)+(+detailStats['-3']||0)+(+detailStats['-2F']||0)+(+detailStats['-3F']||0);
         const nothingP = (+detailStats.NOTHING||0);
         const toP = (+detailStats.TO||0);
+        const otherP = nPlay - madeP - missP - nothingP - toP;
 
         // COMPARISON VALUES (series or overall)
         const madeC = (comparisonAgg['+2']||0)+(comparisonAgg['+3']||0)+(comparisonAgg['+2F']||0)+(comparisonAgg['+3F']||0);
         const missC = (comparisonAgg['-2']||0)+(comparisonAgg['-3']||0)+(comparisonAgg['-2F']||0)+(comparisonAgg['-3F']||0);
         const nothingC = (comparisonAgg.NOTHING||0);
         const toC = (comparisonAgg.TO||0);
+        const otherC = nComp - madeC - missC - nothingC - toC;
 
-        const cats = ['Made FG','Miss','Nothing','Turnover'];
+        const cats = ['Made FG','Miss','Nothing','Turnover', 'Other'];
         const playPct = [
             toPct(madeP,nPlay), toPct(missP,nPlay),
-            toPct(nothingP,nPlay), toPct(toP,nPlay)
+            toPct(nothingP,nPlay), toPct(toP,nPlay), toPct(otherP,nPlay)
         ];
         const compPct = [
             toPct(madeC,nComp), toPct(missC,nComp),
-            toPct(nothingC,nComp), toPct(toC,nComp)
+            toPct(nothingC,nComp), toPct(toC,nComp), toPct(otherC,nComp)
         ];
 
-        const colors = ['#10B981','#EF4444','#6B7280','#F59E0B'];
+        const colors = ['#10B981','#EF4444','#6B7280','#F59E0B', '#8B5CF6'];
         const datasets = cats.map((c,i)=>({
             label:c,
             data:[playPct[i], compPct[i]],
@@ -574,33 +584,23 @@
     }, [detailStats, comparisonAgg, selectedSeries, dark, header]);
 
 
-      // METRICS: PPP + FG% (dual axis)
+      // METRICS: PPP Comparison Chart
       useEffect(() => {
-      if (!detailStats || !comparisonAgg || !metricsRef.current) return;
-      if (metricsInst.current) metricsInst.current.destroy();
+      if (!detailStats || !comparisonAgg || !pppRef.current) return;
+      if (pppInst.current) pppInst.current.destroy();
 
       const playPts = header.ppp || 0;
       const compPts = comparisonAgg.ppp || 0;
 
-      const playFG = header.fg || 0;
-      const compFG = comparisonAgg.fg || 0;
-
-      metricsInst.current = new Chart(metricsRef.current.getContext('2d'), {
+      pppInst.current = new Chart(pppRef.current.getContext('2d'), {
           type:'bar',
           data:{
-              labels: ['Avg Points', 'FG%'],
+              labels: comparisonLabels,
               datasets:[
                   {
-                      label: comparisonLabels[0],
+                      label: 'Avg Points (PPP)',
                       data:[playPts, compPts],
-                      backgroundColor:[VT_PURPLE, VT_PURPLE],
-                      yAxisID:'yPts'
-                  },
-                  {
-                      label: comparisonLabels[1],
-                      data:[playFG, compFG],
-                      backgroundColor:[VT_PINK, VT_PINK],
-                      yAxisID:'yFg'
+                      backgroundColor: [comparisonColors[0], comparisonColors[1]]
                   }
               ]
           },
@@ -611,32 +611,67 @@
                   legend:{ position:'bottom', labels:{ color:dark?'#fff':'#374151' } },
                   tooltip:{
                       callbacks:{
-                          label:(ctx)=>
-                              ctx.dataset.label === 'FG %'
-                              ? `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}%`
-                              : `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(2)}`
+                          label:(ctx)=> `PPP: ${ctx.parsed.y.toFixed(2)}`
                       }
                   }
               },
               scales:{
                   x:{ ticks:{ color:dark?'#9CA3AF':'#374151' }, grid:{ color:dark?'#374151':'#E5E7EB' }},
-                  yPts:{
+                  y:{
                       position:'left', min:0, max:2.0,
                       title:{ display:true, text:'Avg Points (PPP)', color:dark?'#fff':'#111' },
                       ticks:{ color:dark?'#9CA3AF':'#374151' },
                       grid:{ color:dark?'#374151':'#E5E7EB' }
-                  },
-                  yFg:{
+                  }
+              }
+          }
+      });
+    }, [detailStats, comparisonAgg, header, dark, comparisonLabels, comparisonColors]);
+
+    // FG% Comparison Chart
+      useEffect(() => {
+      if (!detailStats || !comparisonAgg || !fgRef.current) return;
+      if (fgInst.current) fgInst.current.destroy();
+
+      const playFG = header.fg || 0;
+      const compFG = comparisonAgg.fg || 0;
+
+      fgInst.current = new Chart(fgRef.current.getContext('2d'), {
+          type:'bar',
+          data:{
+              labels: comparisonLabels,
+              datasets:[
+                  {
+                      label: 'FG %',
+                      data:[playFG, compFG],
+                      backgroundColor:[comparisonColors[0], comparisonColors[1]]
+                  }
+              ]
+          },
+          options:{
+              responsive:true,
+              maintainAspectRatio:false,
+              plugins:{
+                  legend:{ position:'bottom', labels:{ color:dark?'#fff':'#374151' } },
+                  tooltip:{
+                      callbacks:{
+                          label:(ctx)=> `FG %: ${ctx.parsed.y.toFixed(1)}%`
+                      }
+                  }
+              },
+              scales:{
+                  x:{ ticks:{ color:dark?'#9CA3AF':'#374151' }, grid:{ color:dark?'#374151':'#E5E7EB' }},
+                  y:{
                       position:'right', min:0, max:100,
                       title:{ display:true, text:'FG %', color:dark?'#fff':'#111' },
                       ticks:{ callback:v=>`${v}%`, color:dark?'#9CA3AF':'#374151' },
-                      grid:{ drawOnChartArea:false }
+                      grid:{ color:dark?'#374151':'#E5E7EB' }
                   }
               }
           }
       });
 
-  }, [detailStats, comparisonAgg, header, dark]);
+  }, [detailStats, comparisonAgg, header, dark, comparisonLabels, comparisonColors]);
 
 
       // SCORING BREAKDOWN (%)
@@ -1076,14 +1111,21 @@
                   </div>
 
                   {/* Outcome stacked + Metrics dual bar */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
                     <div>
                       <div className="text-sm font-semibold mb-2">Outcome Distribution — Play vs Series Avg (100% stacked)</div>
                       <div style={{height:'260px'}}><canvas ref={outcomeRef}></canvas></div>
                     </div>
-                    <div>
-                      <div className="text-sm font-semibold mb-2">Avg Points &amp; FG% — Play vs Series Avg</div>
-                      <div style={{height:'260px'}}><canvas ref={metricsRef}></canvas></div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <div className="text-sm font-semibold mb-2">Avg Points (PPP)</div>
+                        <div style={{height:'260px'}}><canvas ref={pppRef}></canvas></div>
+                      </div>
+                      <div>
+                        <div className="text-sm font-semibold mb-2">Field Goal Percentage (FG%)</div>
+                        <div style={{height:'260px'}}><canvas ref={fgRef}></canvas></div>
+                      </div>
                     </div>
                   </div>
 
