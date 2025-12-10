@@ -71,6 +71,12 @@
       const [loading,setLoading]=useState(true);
       const [updated,setUpdated]=useState(null);
 
+      // FILTER STATES
+      const [filterMode, setFilterMode]=useState('All Data'); 
+      const [gamesList, setGamesList]=useState([]);
+      const [schedule, setSchedule]=useState([]);
+      const [useFilter, setUseFilter]=useState(false);
+
       // SEARCH + SELECTION
       const [seriesQuery,setSeriesQuery]=useState('');                     // CHANGE: series-only search text
       const [selectedSeries,setSelectedSeries]=useState(null);             // CHANGE: selected series name (e.g., "Alpha")
@@ -95,18 +101,218 @@
         if (radarInst.current) { radarInst.current.destroy(); radarInst.current = null; }
       }, [season, selectedSeries]);
 
+      // LOAD SCHEDULE
+      useEffect(() => {
+        const loadSchedule = async () => {
+          const snap = await database.ref(`playcalls/${season}/schedule`).once('value');
+          if (snap.exists()) {
+            const scheduleData = Object.values(snap.val()).filter(g => g.date !== 'practice');
+            setSchedule(scheduleData);
+            }
+        };
+        loadSchedule();
+      }, [season]);
+
+      // LOAD GAMES DATES
+      useEffect(() => {
+        const loadGames = async () => {
+          const snap = await database.ref(`playcalls/${season}/games`).once('value');
+          if (!snap.exists()) {
+            setGamesList([]);
+            return;
+          }
+          const games = snap.val();
+          const dates = Object.keys(games).sort().reverse(); // most recent first
+          setGamesList(dates);
+        };
+        loadGames();
+      }, [season]);
+
+      // Calculate which games to use based on filter
+      const filteredGameDates = useMemo(() => {
+        if (!gamesList.length) return [];
+
+        switch (filterMode) {
+          case 'Last 3':
+            return gamesList.slice(0, 3);
+          case 'Last 5':
+            return gamesList.slice(0, 5);
+          case 'ACC':
+            return gamesList.filter(date => {
+              const game = schedule.find(g => g.date === date);
+              return game?.conference === 'ACC';
+            });
+          case 'All':
+            return gamesList;
+          case 'All Data':
+            return [];
+          default:
+            return [];
+        }
+      }, [filterMode, gamesList, schedule]);
+
+      // Update useFilter flag
+      useEffect(() => {
+        setUseFilter(filterMode !== 'All Data');
+        setLoading(true);
+      }, [filterMode]);
+
+      // Recalculate all stats from raw possessions
+      const calculateStatsFromPossessions = useCallback(async (season, gameDates) => {
+        console.log('🔢 calculateStatsFromPossessions called with:', gameDates);
+        const allStats = {};
+        let totalPossessions = 0;
+
+        // Load possessions for filtered games
+        for (let i = 0; i < gameDates.length; i++) {
+          const gameDate = gameDates[i];
+          const snap = await database.ref(`playcalls/${season}/games/${gameDate}/possessions`).once('value');
+          if (!snap.exists()) continue;
+
+          const possessions = snap.val();
+          const possCount = Object.keys(possessions).length;
+          totalPossessions += possCount;
+          console.log(`    ✅ Found ${possCount} possessions for ${gameDate}`);
+
+          Object.values(possessions).forEach((poss) => {
+            // Skip non-playcalls (but include Transition, NoPlay, WhatsNext)
+            if (poss.type === 'transition') {
+              const key = 'Transition/1';
+              if (!allStats[key]) {
+                allStats[key] = initStats('Transition', 'T1');
+              }
+              incrementStats(allStats[key], poss);
+            } else if (poss.type === 'no_play') {
+              const key = 'NoPlay/1';
+              if (!allStats[key]) {
+                allStats[key] = initStats('NoPlay', '1');
+              }
+              incrementStats(allStats[key], poss);
+            } else if (poss.type === 'whats_next') {
+              const key = 'WhatsNext/1';
+              if (!allStats[key]) {
+                allStats[key] = initStats('WhatsNext', '1');
+              }
+              incrementStats(allStats[key], poss);
+            } else if (poss.type === 'playcall' && poss.series && poss.playName) {
+              const key = `${poss.series}/${poss.playName}`;
+              if (!allStats[key]) {
+                allStats[key] = initStats(poss.series, poss.playName);
+              }
+              incrementStats(allStats[key], poss);
+            }
+          });
+        }
+
+        // Calculate derived metrics for all plays
+        Object.values(allStats).forEach(stats => {
+          calculateDerivedMetrics(stats);
+        });
+
+        return allStats;
+      }, []);
+
+      // Helper: Initialize stats object
+      const initStats = (series, playName) => ({
+        series,
+        playName,
+        NumCalls: 0,
+        '+2': 0, '+3': 0, '+2F': 0, '+3F': 0,
+        '-2': 0, '-3': 0, '-2F': 0, '-3F': 0,
+        'TO': 0, 'NOTHING': 0,
+        'Foul_Floor': 0, 'Foul_Bonus': 0,
+        FT_Made: 0,
+        FT_Att: 0
+      });
+
+      // Helper: Increment stats from possession
+      const incrementStats = (stats, poss) => {
+        stats.NumCalls++;
+        
+        // Count outcome
+        const outcome = poss.outcome;
+        if (stats.hasOwnProperty(outcome)) {
+          stats[outcome]++;
+        }
+        
+        // Add FTs
+        stats.FT_Made += (poss.freeThrowsMade || 0);
+        stats.FT_Att += (poss.freeThrowsAttempted || 0);
+      };
+
+      // Helper: Calculate derived metrics
+      const calculateDerivedMetrics = (stats) => {
+        const n = stats.NumCalls;
+        if (n === 0) return;
+        
+        // Points
+        const fgPoints = (stats['+2'] * 2) + (stats['+3'] * 3) + (stats['+2F'] * 2) + (stats['+3F'] * 3);
+        const totalPoints = fgPoints + stats.FT_Made;
+        
+        stats.PPP = totalPoints / n;
+        stats.AvgPointsNoFTs = fgPoints / n;
+        
+        // FG%
+        const made = stats['+2'] + stats['+3'] + stats['+2F'] + stats['+3F'];
+        stats.MadeFG = (made / n) * 100;
+        
+        // Fouls
+        stats.FOF = stats['+2F'] + stats['+3F'] + stats['-2F'] + stats['-3F'];
+        const shootingFouls = stats.FOF + (stats['Foul_Bonus'] || 0);
+        stats.FreeThrowRate = shootingFouls / n;
+        stats.FoulRate = (shootingFouls + (stats['Foul_Floor'] || 0)) / n;
+      };
+
       // Load from Firebase (live listener)
       const load=useCallback(()=>{
         setLoading(true);
-        const dbRef= database.ref(`playcalls/${season}/stats/series`);
-        const listener = dbRef.on('value', (snap) => {
-          setPlayData(snap.exists() ? snap.val() : null);
-          setUpdated(new Date().toLocaleString());
-          setLoading(false);
-        }, () => setLoading(false));
-        return () => {dbRef.off('value', listener);};
-      },[season]);
-      useEffect(()=>load(),[load]);
+
+        if (useFilter) {
+          const gamesToUse = filteredGameDates.length > 0 ? filteredGameDates : gamesList;
+          if (gamesToUse.length === 0) {
+            setLoading(false);
+            return () => {};
+          }
+          
+          calculateStatsFromPossessions(season, filteredGameDates).then(stats => {
+            
+            // Convert to same format as database structure
+            const formatted = {};
+            Object.entries(stats).forEach(([key, data]) => {
+              const [series, playName] = key.split('/');
+              if (!formatted[series]) formatted[series] = {};
+              formatted[series][playName] = data;
+            });
+
+            setPlayData(formatted);
+            setUpdated(new Date().toLocaleString());
+            setLoading(false);
+            }).catch(error => {
+              console.error("Error loading filtered data", error);
+              setLoading(false);
+            });
+
+            return () => {};
+        } else {
+          const dbRef= database.ref(`playcalls/${season}/stats/series`);
+          const listener = dbRef.on('value', (snap) => {
+            setPlayData(snap.exists() ? snap.val() : null);
+            setUpdated(new Date().toLocaleString());
+            setLoading(false);
+          }, (error) => {
+            console.error("Error: ", error);
+            setLoading(false);
+          });
+          return () => {
+            dbRef.off('value', listener);
+          };
+        }
+      },[season,useFilter,filteredGameDates,calculateStatsFromPossessions, filterMode]);
+
+      useEffect(()=>{
+        const cleanup = load();
+        return cleanup;
+      },[load]);
 
       // SERIES
       const allSeries=useMemo(()=> playData?Object.keys(playData).sort():[],[playData]);
@@ -517,6 +723,22 @@
                   <option value="2024">Season 2024</option>
                   <option value="2025">Season 2025</option>
                 </select>
+                <select
+                  value={filterMode}
+                  onChange={(e) => setFilterMode(e.target.value)}
+                  className={`selectlike px-3 py-2 rounded border ${dark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
+                >
+                  <option value="All Data">All Data</option>
+                  <option value="All">All Games ({gamesList.length})</option>
+                  <option value="Last 3">Last 3 Games</option>
+                  <option value="Last 5">Last 5 Games</option>
+                  <option value="ACC">
+                    ACC Only ({gamesList.filter(date => {
+                      const game = schedule.find(g => g.date === date);
+                      return game?.conference === 'ACC';
+                    }).length})
+                  </option>
+                </select>
                 <button type="button" className="flex items-center gap-2 px-3 py-2 rounded text-white bg-green-600 hover:bg-green-700 shadow">
                   <span className="w-2 h-2 rounded-full bg-green-300 animate-pulse" />
                   Live
@@ -534,7 +756,13 @@
             {updated && (
               <div className="flex items-center gap-2 mt-2">
                 <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-                <div className="text-xs opacity-70">Live • {updated}</div>
+                <div className="text-xs opacity-70">Live • {updated}
+                  {useFilter && (
+                    <span className="px-2 py-1 rounded text-white">
+                    •  Filtered: {filteredGameDates.length} games
+                    </span>
+                  )}
+                  </div>
               </div>
             )}
           </div>
