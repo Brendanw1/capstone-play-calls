@@ -96,9 +96,10 @@
       const radarInst = useRef(null);
       const [radarSelection, setRadarSelection] = useState([]);
       useEffect(() => {
-        setRadarSelection([]);
-        setSelectedPlay(null);
-        if (radarInst.current) { radarInst.current.destroy(); radarInst.current = null; }
+        if (radarInst.current) {
+          radarInst.current.destroy();
+          radarInst.current = null;
+        }
       }, [season, selectedSeries]);
 
       // LOAD SCHEDULE
@@ -387,7 +388,11 @@
       },[scopeRows,sortBy,sortAsc]);
 
       // CLICK PLAY
-      const clickPlayRow=(r)=>{ setRadarSelection([]); setSelectedSeries(r.series); setSelectedPlay({series:r.series,playNumber:r.playNumber}); };
+      const clickPlayRow = (r) => {
+        setSelectedSeries(r.series);
+        setSelectedPlay({ series: r.series, playNumber: r.playNumber });
+        setRadarSelection([r.playNumber]); // auto-select play for radar
+      };
       const playLabel = (r)=> `${r.series} ${r.playNumber}`;
 
       // AGGREGATE SERIES
@@ -653,7 +658,7 @@
         });
       }, [seriesScatter, dark, postGameMode]);
 
-      // RADAR (kept)
+      // RADAR
       function buildRadarStats(s, playNumberLabel = "") {
         const n = parseInt(s.NumCalls || s.numCalls) || 1;
         const made = ['+2','+3','+2F','+3F'].reduce((sum, k) => sum + (+s[k] || 0), 0);
@@ -663,10 +668,10 @@
         const ftr = s.FreeThrowRate !== undefined ? +s.FreeThrowRate : 0;
         const pts = (+s["+2"]||0)*2 + (+s["+3"]||0)*3 + (+s["+2F"]||0)*2 + (+s["+3F"]||0)*3;
         const ppp = n ? pts / n : 0;
-        const mtor = n ? (misses + to) / n : 0;
-        const mtorInv = 1 - mtor;
-        const pppNorm = Math.min(ppp / 3, 1);
-        return { label: playNumberLabel, values: [fg, ftr, pppNorm, mtorInv], real: { fg, ftr, ppp, mtorInv } };
+        const tor = n ? to / n : 0;
+        const torInv = 1 - tor;
+        const pppNorm = Math.min(ppp / 2, 1);
+        return { label: playNumberLabel, values: [fg, ftr, pppNorm, torInv], real: { fg, ftr, ppp, torInv } };
       }
 
       useEffect(() => {
@@ -675,41 +680,58 @@
           if (radarInst.current) { radarInst.current.destroy(); radarInst.current = null; }
           return;
         }
-        const labels = ["FG%", "Free Throw Rate", "PPP", "Miss"];
-        const datasets = [];
 
+        const labels = ["FG%", "Free Throw Rate", "PPP", "Turnover Rate"];
+        const datasets = [];
+        const COLORS = ["#3B82F6", "#10B981", "#F59E0B", "#8B5CF6"];
+
+        //  Build a list of play numbers to display
+        let playsToShow = [...radarSelection];
+
+        // If a play is selected, ensure it is ALWAYS included
         if (selectedPlay) {
-          const s = playData[selectedSeries][selectedPlay.playNumber];
-          if (!s) { if (radarInst.current) { radarInst.current.destroy(); radarInst.current = null; } return; }
-          const out = buildRadarStats(s, `${selectedSeries} ${selectedPlay.playNumber}`);
-          datasets.push({
-            label: out.label, data: out.values, realValues: out.real,
-            fill: true, backgroundColor: "rgba(59,130,246,0.3)", borderColor: "#3B82F6",
-          });
-        } else if (radarSelection.length > 0) {
-          const COLORS = ["#3B82F6", "#10B981", "#F59E0B"];
-          radarSelection.forEach((num, i) => {
-            const s = playData[selectedSeries][num]; if (!s) return;
-            const out = buildRadarStats(s, `${selectedSeries} ${num}`);
-            const C = COLORS[i % COLORS.length];
-            datasets.push({
-              label: out.label, data: out.values, realValues: out.real,
-              fill: true, backgroundColor: C + "40", borderColor: C,
-            });
-          });
+          if (!playsToShow.includes(selectedPlay.playNumber)) {
+            playsToShow.unshift(selectedPlay.playNumber);
+          }
         }
 
-        if (datasets.length === 0) { if (radarInst.current) radarInst.current.destroy(); radarInst.current = null; return; }
-        if (radarInst.current) radarInst.current.destroy();
+        //  Build datasets for every play in the list
+        playsToShow.forEach((num, i) => {
+          const s = playData[selectedSeries][num];
+          if (!s) return;
 
+          const out = buildRadarStats(s, `${selectedSeries} ${num}`);
+          const C = COLORS[i % COLORS.length];
+
+          datasets.push({
+            label: out.label,
+            data: out.values,
+            realValues: out.real,
+            fill: true,
+            backgroundColor: C + "40",
+            borderColor: C,
+          });
+        });
+
+        //  Handle empty state
+        if (datasets.length === 0) {
+          if (radarInst.current) radarInst.current.destroy();
+          radarInst.current = null;
+          return;
+        }
+
+        //  Render chart
+        if (radarInst.current) radarInst.current.destroy();
         radarInst.current = new Chart(radarRef.current, {
           type: "radar",
           data: { labels, datasets },
           options: {
-            responsive: true, maintainAspectRatio: false,
+            responsive: true,
+            maintainAspectRatio: false,
             scales: {
               r: {
-                min: 0, max: 1, ticks: { display: false },
+                min: 0, max: 1,
+                ticks: { display: false },
                 grid: { color: dark ? "#4B5563" : "#D1D5DB" },
                 pointLabels: { color: dark ? "#f9fafb" : "#111827", font: { size: 12 } },
               },
@@ -719,12 +741,13 @@
               tooltip: {
                 callbacks: {
                   label: (ctx) => {
-                    const real = ctx.dataset.realValues; const metric = ctx.label;
+                    const real = ctx.dataset.realValues;
+                    const metric = ctx.label;
                     switch (metric) {
-                      case "FG%": return `FG%: ${(real.fg*100).toFixed(1)}%`;
-                      case "Free Throw Rate": return `Free Throw Rate: ${(real.ftr*100).toFixed(1)}%`;
+                      case "FG%": return `FG%: ${(real.fg * 100).toFixed(1)}%`;
+                      case "Free Throw Rate": return `Free Throw Rate: ${(real.ftr * 100).toFixed(1)}%`;
                       case "PPP": return `PPP: ${real.ppp.toFixed(2)}`;
-                      case "Miss": return `Miss Rate: ${((1-real.mtorInv)*100).toFixed(1)}%`;
+                      case "Turnover Rate": return `Turnover Rate: ${((1 - real.torInv) * 100).toFixed(1)}%`;
                       default: return "";
                     }
                   }
@@ -734,6 +757,7 @@
           }
         });
       }, [selectedSeries, selectedPlay, radarSelection, playData, dark]);
+
 
       // HELPERS
       const pppColor = (v)=> v>=0.95 ? 'text-green-400' : 'text-red-400';
@@ -959,38 +983,45 @@
                     <h3 className="text-lg font-bold mb-4">Play Profile</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div>
-                        {!selectedPlay && (
-                          <>
-                            <label className="text-sm opacity-75 block mb-2">Compare plays (select up to 3)</label>
-                            <div className="space-y-2">
-                              {Object.keys(playData[selectedSeries]).map(num => {
-                                const label = `${selectedSeries} ${num}`;
-                                const selected = radarSelection.includes(num);
-                                return (
-                                  <button
-                                    key={num}
-                                    onClick={() => {
-                                      if (selected) setRadarSelection(radarSelection.filter(x => x !== num));
-                                      else if (radarSelection.length < 3) setRadarSelection([...radarSelection, num]);
-                                    }}
-                                    className={`w-full px-3 py-2 rounded text-left border ${
-                                      selected
-                                        ? (dark ? "bg-blue-600 border-blue-500 text-white" : "bg-blue-100 border-blue-400 text-blue-900")
-                                        : (dark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300 text-gray-900")
-                                    }`}
-                                  >
-                                    {label}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </>
-                        )}
-                        {selectedPlay && (
-                          <div className="text-sm opacity-75">
-                            Showing radar for: <strong>{selectedSeries} {selectedPlay.playNumber}</strong>
-                          </div>
-                        )}
+                        <div>
+                          {selectedSeries && (
+                            <>
+                              <label className="text-sm opacity-75 block mb-2">Compare plays (select up to 3)</label>
+
+                              {selectedPlay && (
+                                <div className="text-xs opacity-60 mb-2">
+                                  Currently viewing: <strong>{selectedSeries} {selectedPlay.playNumber}</strong>
+                                </div>
+                              )}
+
+                              <div className="space-y-2">
+                                {Object.keys(playData[selectedSeries]).map(num => {
+                                  const label = `${selectedSeries} ${num}`;
+                                  const selected = radarSelection.includes(num);
+                                  return (
+                                    <button
+                                      key={num}
+                                      onClick={() => {
+                                        if (selected) setRadarSelection(radarSelection.filter(x => x !== num));
+                                        else if (radarSelection.length < 3) setRadarSelection([...radarSelection, num]);
+                                      }}
+                                      className={`w-full px-3 py-2 rounded text-left border ${
+                                        selected
+                                          ? (dark ? "bg-blue-600 border-blue-500 text-white" : 
+                                                    "bg-blue-100 border-blue-400 text-blue-900")
+                                          : (dark ? "bg-gray-700 border-gray-600 text-white" : 
+                                                    "bg-white border-gray-300 text-gray-900")
+                                      }`}
+                                    >
+                                      {label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </>
+                          )}
+                        </div>
+
                       </div>
                       <div className="flex justify-center">
                         <div style={{ height: "540px", width: "540px" }}>
