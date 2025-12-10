@@ -128,6 +128,30 @@
         loadGames();
       }, [season]);
 
+      // Clear selected play if it doesn't exist in filtered data
+      useEffect(() => {
+        if (!playData) return;
+
+        if (selectedSeries && !playData[selectedSeries]) {
+          setSelectedSeries(null);
+          setSelectedPlay(null);
+          setRadarSelection([]);
+          return;
+        }
+        if (selectedPlay && selectedSeries) {
+        
+          // Check if selected play exists in current filtered data
+          const playExists = playData[selectedPlay.series] && 
+                            playData[selectedPlay.series][selectedPlay.playNumber];
+          
+          if (!playExists) {
+            setSelectedPlay(null);
+            setSelectedSeries(null);
+            setRadarSelection([]);
+          }
+        } 
+      }, [playData, selectedPlay]);
+
       // Calculate which games to use based on filter
       const filteredGameDates = useMemo(() => {
         if (!gamesList.length) return [];
@@ -386,13 +410,20 @@
       // DETAIL + SERIES AGG
       const detailStats=useMemo(()=>{
         if(!selectedSeries) return null;
+        if(!playData || !playData[selectedSeries]) return null;
+
         if(selectedPlay && selectedPlay.series===selectedSeries){
-          return playData?.[selectedSeries]?.[selectedPlay.playNumber] || null;
+          const playExists=playData[selectedSeries][selectedPlay.playNumber];
+          if (!playExists) return null;
+          return playExists;
         }
         return aggregateSeries(selectedSeries);
       },[selectedSeries,selectedPlay,playData]);
 
-      const seriesAgg=useMemo(()=> selectedSeries?aggregateSeries(selectedSeries):null,[selectedSeries,playData]);
+      const seriesAgg=useMemo(()=> {
+        if (!selectedSeries || !playData || !playData[selectedSeries]) return null;
+        return aggregateSeries(selectedSeries);
+      },[selectedSeries,playData]);
 
       // HEADER METRICS (for charts)
       const header=useMemo(()=>{
