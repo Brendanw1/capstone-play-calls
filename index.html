@@ -1877,37 +1877,37 @@
                     
                     <div>
                         <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
-                            <button onClick={() => logPlayOutcome('+3')} disabled={logging}
-                                className={`px-3 py-4 text-lg rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-green-600`}>
-                                3PT Made<br/>✓
-                            </button>
                             <button onClick={() => logPlayOutcome('+3F')} disabled={logging}
                                 className={`px-3 py-4 text-lg rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-green-600`}>
                                 3PT+Foul<br/>✓
                             </button>
-                            <button onClick={() => logPlayOutcome('+2')} disabled={logging}
+                            <button onClick={() => logPlayOutcome('+3')} disabled={logging}
                                 className={`px-3 py-4 text-lg rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-green-500`}>
-                                2PT Made<br/>✓
+                                3PT Made<br/>✓
                             </button>
-                            <button onClick={() => logPlayOutcome('+2F')} disabled={logging}
-                                className={`px-3 py-4 text-lg rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-green-500`}>
-                                2PT+Foul<br/>✓
+                            <button onClick={() => logPlayOutcome('-3F')} disabled={logging}
+                                className={`px-3 py-4 text-lg rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-red-500`}>
+                                3PT Miss<br/>+Foul
                             </button>
                             <button onClick={() => logPlayOutcome('-3')} disabled={logging}
                                 className={`px-3 py-4 text-lg rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-red-600`}>
                                 3PT Miss<br/>✗
                             </button>
-                            <button onClick={() => logPlayOutcome('-3F')} disabled={logging}
-                                className={`px-3 py-4 text-lg rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-red-600`}>
-                                3PT Miss<br/>+Foul
+                            <button onClick={() => logPlayOutcome('+2F')} disabled={logging}
+                                className={`px-3 py-4 text-lg rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-green-600`}>
+                                2PT+Foul<br/>✓
                             </button>
-                            <button onClick={() => logPlayOutcome('-2')} disabled={logging}
-                                className={`px-3 py-4 text-lg rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-red-500`}>
-                                2PT Miss<br/>✗
+                            <button onClick={() => logPlayOutcome('+2')} disabled={logging}
+                                className={`px-3 py-4 text-lg rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-green-500`}>
+                                2PT Made<br/>✓
                             </button>
                             <button onClick={() => logPlayOutcome('-2F')} disabled={logging}
                                 className={`px-3 py-4 text-lg rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-red-500`}>
                                 2PT Miss<br/>+Foul
+                            </button>
+                            <button onClick={() => logPlayOutcome('-2')} disabled={logging}
+                                className={`px-3 py-4 text-lg rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-red-600`}>
+                                2PT Miss<br/>✗
                             </button>
                             <button onClick={() => logPlayOutcome('Foul_Bonus')} disabled = {logging}
                                 className={`px-3 py-4 text-lg rounded-lg font-bold text-white transtion-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-blue-600`}>
