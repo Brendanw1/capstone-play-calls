@@ -765,7 +765,7 @@
                         play.displayName.toLowerCase().includes(searchLower) ||
                         play.id.toLowerCase().includes(searchLower)
                     );
-                }).slice(0, 5);
+                });
             }, [getAllPlays]);
 
             const decrementTime = (timeStr, seconds) => {
@@ -797,7 +797,7 @@
                         ...play, 
                         count: (existingPlay?.count || 0) + 1,
                         lastOutcome: outcome
-                    }, ...filtered].slice(0, 5);
+                    }, ...filtered];
                 });
             }, [getAllPlays]);
 
@@ -1876,54 +1876,54 @@
                     */}
                     
                     <div>
-                        <div className="grid grid-cols-3 md:grid-cols-5 gap-2">
+                        <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
                             <button onClick={() => logPlayOutcome('+3')} disabled={logging}
                                 className={`px-3 py-4 text-lg rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-green-600`}>
                                 3PT Made<br/>✓
-                            </button>
-                            <button onClick={() => logPlayOutcome('+2')} disabled={logging}
-                                className={`px-3 py-4 text-lg rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-green-500`}>
-                                2PT Made<br/>✓
-                            </button>
-                            <button onClick={() => logPlayOutcome('-3')} disabled={logging}
-                                className={`px-3 py-4 text-lg rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-red-600`}>
-                                3PT Miss<br/>✗
-                            </button>
-                            <button onClick={() => logPlayOutcome('-2')} disabled={logging}
-                                className={`px-3 py-4 text-lg rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-red-500`}>
-                                2PT Miss<br/>✗
                             </button>
                             <button onClick={() => logPlayOutcome('+3F')} disabled={logging}
                                 className={`px-3 py-4 text-lg rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-green-600`}>
                                 3PT+Foul<br/>✓
                             </button>
+                            <button onClick={() => logPlayOutcome('+2')} disabled={logging}
+                                className={`px-3 py-4 text-lg rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-green-500`}>
+                                2PT Made<br/>✓
+                            </button>
                             <button onClick={() => logPlayOutcome('+2F')} disabled={logging}
                                 className={`px-3 py-4 text-lg rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-green-500`}>
                                 2PT+Foul<br/>✓
+                            </button>
+                            <button onClick={() => logPlayOutcome('-3')} disabled={logging}
+                                className={`px-3 py-4 text-lg rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-red-600`}>
+                                3PT Miss<br/>✗
                             </button>
                             <button onClick={() => logPlayOutcome('-3F')} disabled={logging}
                                 className={`px-3 py-4 text-lg rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-red-600`}>
                                 3PT Miss<br/>+Foul
                             </button>
+                            <button onClick={() => logPlayOutcome('-2')} disabled={logging}
+                                className={`px-3 py-4 text-lg rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-red-500`}>
+                                2PT Miss<br/>✗
+                            </button>
                             <button onClick={() => logPlayOutcome('-2F')} disabled={logging}
                                 className={`px-3 py-4 text-lg rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-red-500`}>
                                 2PT Miss<br/>+Foul
                             </button>
-                            <button onClick={() => logPlayOutcome('TO')} disabled={logging}
-                                className={`px-3 py-4 text-lg rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-yellow-600`}>
-                                Turnover
-                            </button>
-                            <button onClick={() => logPlayOutcome('NOTHING')} disabled={logging}
-                                className={`px-3 py-4 text-lg rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} ${darkMode ? 'bg-gray-600' : 'bg-gray-400'}`}>
-                                Nothing
+                            <button onClick={() => logPlayOutcome('Foul_Bonus')} disabled = {logging}
+                                className={`px-3 py-4 text-lg rounded-lg font-bold text-white transtion-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-blue-600`}>
+                                Foul Bonus
                             </button>
                             <button onClick={() => logPlayOutcome('Foul_Floor')} disabled = {logging}
                                 className={`px-3 py-4 text-lg rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-blue-600`}>
                                 Foul on Floor
                             </button>
-                            <button onClick={() => logPlayOutcome('Foul_Bonus')} disabled = {logging}
-                                className={`px-3 py-4 text-lg rounded-lg font-bold text-white transtion-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-blue-600`}>
-                                Foul Bonus
+                            <button onClick={() => logPlayOutcome('NOTHING')} disabled={logging}
+                                className={`px-3 py-4 text-lg rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} ${darkMode ? 'bg-gray-600' : 'bg-gray-400'}`}>
+                                Nothing
+                            </button>
+                            <button onClick={() => logPlayOutcome('TO')} disabled={logging}
+                                className={`px-3 py-4 text-lg rounded-lg font-bold text-white transition-colors ${logging ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'} bg-yellow-600`}>
+                                Turnover
                             </button>
                         </div>
                     </div>
@@ -2706,7 +2706,7 @@
                             <h3 className={`text-sm font-bold mb-3 tracking-wide ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
                                 Recent Plays
                             </h3>
-                            <div className="flex gap-3 overflow-x-auto pb-2">
+                            <div className="flex gap-3 overflow-y-auto pb-2">
                                 {recentPlays.map(play => {
                                     const outcomeIcons = {
                                         '+3': '✓3', '+2': '✓2', '-3': 'Missed 3', '-2': 'Missed 2',
@@ -2718,14 +2718,14 @@
                                         <button
                                             key={play.id}
                                             onClick={() => setSelectedPlay(play)}
-                                            className={`px-3 py-2 rounded-lg transition-all text-left hover:scale-105 ${
+                                            className={`px-4 py-2 rounded-lg transition-all text-left hover:scale-105 ${
                                                 darkMode 
                                                     ? 'bg-gray-700 hover:bg-gray-600 text-white' 
                                                     : 'bg-gray-100 hover:bg-gray-200 text-gray-800'
                                             }`}
                                         >
-                                            <div className="font-semibold text-sm truncate">{play.displayName}</div>
-                                            <div className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-600'} flex items-center gap-1`}>
+                                            <div className="font-semibold text-md truncate">{play.displayName}</div>
+                                            <div className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'} flex items-center gap-1`}>
                                                 <span>{play.count}x</span>
                                                 {play.lastOutcome && (
                                                     <>
