@@ -430,6 +430,8 @@
         return aggregateSeries(selectedSeries);
       },[selectedSeries,playData]);
 
+
+
       // HEADER METRICS (for charts)
       const header=useMemo(()=>{
         if(!detailStats) return null;
@@ -444,7 +446,52 @@
         return {n,ppp,fg,fof};
       },[detailStats]);
 
+      const comparisonLabels = useMemo(() => {
+        if (selectedPlay) {
+            return ["Play", "Series"];
+        }
+        return ["Series", "All Plays"];
+      }, [selectedPlay]);
+
+
       const toPct = (num,den)=> den? 100*num/den : 0;
+      
+      // OVERALL AGGREGATE OF ALL PLAYS (new)
+      const overallAgg = useMemo(() => {
+          if (!flat.length) return null;
+
+          const A = {
+              N: 0, '+2': 0, '+3': 0, '+2F': 0, '+3F': 0,
+              '-2': 0, '-3': 0, '-2F': 0, '-3F': 0,
+              NOTHING: 0, TO: 0, FOF: 0
+          };
+
+          flat.forEach(r => {
+              const s = r.stats;
+              const n = r.n;
+
+              A.N += n;
+              ['+2','+3','+2F','+3F','-2','-3','-2F','-3F','NOTHING','TO'].forEach(k => {
+                  A[k] += (+s[k] || 0);
+              });
+
+              A.FOF += (+s['+2F']||0)+(+s['+3F']||0)+(+s['-2F']||0)+(+s['-3F']||0);
+          });
+
+          // Derived
+          const pts = 2*(A['+2']+A['+2F']) + 3*(A['+3']+A['+3F']);
+          const ppp = A.N ? pts / A.N : 0;
+          const made = A['+2'] + A['+3'] + A['+2F'] + A['+3F'];
+          const fg = A.N ? (made / A.N) * 100 : 0;
+
+          return { ...A, pts, ppp, fg };
+      }, [flat]);
+
+      // New helper: comparison target
+      const comparisonAgg = useMemo(() => {
+          return selectedPlay ? seriesAgg : overallAgg;
+      }, [selectedPlay, seriesAgg, overallAgg]);
+
 
       // ====== HEATMAP rows (Post-game; series selected; no play) ======
       const seriesHeatmap = useMemo(() => {
@@ -462,149 +509,204 @@
       }, [selectedSeries, selectedPlay, playData]);
 
       // 100% STACKED OUTCOME
-      useEffect(()=>{
-        if(!detailStats || !selectedSeries || !seriesAgg || !outcomeRef.current) return;
-        if(outcomeInst.current) outcomeInst.current.destroy();
+      useEffect(() => {
+        if (!detailStats || !selectedSeries || !comparisonAgg || !outcomeRef.current) return;
 
-        const nPlay = header.n||1;
+        if (outcomeInst.current) outcomeInst.current.destroy();
+
+        const nPlay = header.n || 1;
+        const nComp = comparisonAgg.N || 1;
+
+        // PLAY VALUES
         const madeP = (+detailStats['+2']||0)+(+detailStats['+3']||0)+(+detailStats['+2F']||0)+(+detailStats['+3F']||0);
         const missP = (+detailStats['-2']||0)+(+detailStats['-3']||0)+(+detailStats['-2F']||0)+(+detailStats['-3F']||0);
         const nothingP = (+detailStats.NOTHING||0);
         const toP = (+detailStats.TO||0);
 
-        const nSer = seriesAgg.N||1;
-        const madeS = (seriesAgg['+2']||0)+(seriesAgg['+3']||0)+(seriesAgg['+2F']||0)+(seriesAgg['+3F']||0);
-        const missS = (seriesAgg['-2']||0)+(seriesAgg['-3']||0)+(seriesAgg['-2F']||0)+(seriesAgg['-3F']||0);
-        const nothingS = (seriesAgg.NOTHING||0);
-        const toS = (seriesAgg.TO||0);
+        // COMPARISON VALUES (series or overall)
+        const madeC = (comparisonAgg['+2']||0)+(comparisonAgg['+3']||0)+(comparisonAgg['+2F']||0)+(comparisonAgg['+3F']||0);
+        const missC = (comparisonAgg['-2']||0)+(comparisonAgg['-3']||0)+(comparisonAgg['-2F']||0)+(comparisonAgg['-3F']||0);
+        const nothingC = (comparisonAgg.NOTHING||0);
+        const toC = (comparisonAgg.TO||0);
 
-        const cats=['Made FG','Miss','Nothing','Turnover'];
-        const playPct=[toPct(madeP,nPlay),toPct(missP,nPlay),toPct(nothingP,nPlay),toPct(toP,nPlay)];
-        const serPct=[toPct(madeS,nSer),toPct(missS,nSer),toPct(nothingS,nSer),toPct(toS,nSer)];
-        const colors=['#10B981','#EF4444','#6B7280','#F59E0B'];
+        const cats = ['Made FG','Miss','Nothing','Turnover'];
+        const playPct = [
+            toPct(madeP,nPlay), toPct(missP,nPlay),
+            toPct(nothingP,nPlay), toPct(toP,nPlay)
+        ];
+        const compPct = [
+            toPct(madeC,nComp), toPct(missC,nComp),
+            toPct(nothingC,nComp), toPct(toC,nComp)
+        ];
 
-        const datasets=cats.map((c,i)=>({label:c,data:[playPct[i],serPct[i]],backgroundColor:colors[i],stack:'100'}));
+        const colors = ['#10B981','#EF4444','#6B7280','#F59E0B'];
+        const datasets = cats.map((c,i)=>({
+            label:c,
+            data:[playPct[i], compPct[i]],
+            backgroundColor:colors[i],
+            stack:'100'
+        }));
 
-        outcomeInst.current=new Chart(outcomeRef.current.getContext('2d'),{
-          type:'bar',
-          data:{labels:['Play','Series Avg'],datasets},
-          options:{
-            indexAxis:'y',
-            responsive:true,maintainAspectRatio:false,
-            scales:{
-              x:{stacked:true,beginAtZero:true,max:100,ticks:{callback:v=>`${v}%`,color:dark?'#9CA3AF':'#6B7280'},grid:{color:dark?'#374151':'#E5E7EB'}},
-              y:{stacked:true,ticks:{color:dark?'#9CA3AF':'#6B7280'},grid:{display:false}}
-            },
-            plugins:{legend:{position:'bottom',labels:{color:dark?'#fff':'#374151'}},
-                     tooltip:{callbacks:{label:(c)=>`${c.dataset.label}: ${c.formattedValue}%`}}}
-          }
+        outcomeInst.current = new Chart(outcomeRef.current.getContext('2d'), {
+            type:'bar',
+            data:{ labels:comparisonLabels, datasets },
+            options:{
+                indexAxis:'y',
+                responsive:true,
+                maintainAspectRatio:false,
+                scales:{
+                    x:{ stacked:true, beginAtZero:true, max:100,
+                        ticks:{ callback:v=>`${v}%`, color:dark?'#9CA3AF':'#6B7280' },
+                        grid:{ color:dark?'#374151':'#E5E7EB' }
+                    },
+                    y:{ stacked:true,
+                        ticks:{ color:dark?'#9CA3AF':'#6B7280' },
+                        grid:{ display:false }
+                    }
+                },
+                plugins:{
+                    legend:{ position:'bottom', labels:{ color:dark?'#fff':'#374151' } },
+                    tooltip:{ callbacks:{ label:(c)=>`${c.dataset.label}: ${c.formattedValue}%` } }
+                }
+            }
         });
-      },[detailStats,seriesAgg,selectedSeries,selectedPlay,dark,header]);
+
+    }, [detailStats, comparisonAgg, selectedSeries, dark, header]);
+
 
       // METRICS: PPP + FG% (dual axis)
       useEffect(() => {
-        if (!detailStats || !selectedSeries || !seriesAgg || !metricsRef.current) return;
-        if (metricsInst.current) metricsInst.current.destroy();
+      if (!detailStats || !comparisonAgg || !metricsRef.current) return;
+      if (metricsInst.current) metricsInst.current.destroy();
 
-        const playPts   = header.ppp || 0;
-        const seriesPts = seriesAgg.ppp || 0;
-        const playFG    = header.fg || 0;
-        const seriesFG  = seriesAgg.fg || 0;
+      const playPts = header.ppp || 0;
+      const compPts = comparisonAgg.ppp || 0;
 
-        const BENCH = 0.95;
-        const ptsColors = [
-          playPts >= BENCH ? '#10B981' : '#EF4444',
-          seriesPts >= BENCH ? '#10B981' : '#EF4444'
-        ];
-        const fgColors = ['#60A5FA', '#94A3B8'];
+      const playFG = header.fg || 0;
+      const compFG = comparisonAgg.fg || 0;
 
-        metricsInst.current = new Chart(metricsRef.current.getContext('2d'), {
-          type: 'bar',
-          data: {
-            labels: ['Play', 'Series Avg'],
-            datasets: [
-              { label: 'Avg Points', data: [playPts, seriesPts], backgroundColor: [VT_PURPLE, VT_PINK], yAxisID: 'yPts' },
-              { label: 'FG %',       data: [playFG, seriesFG],   backgroundColor: [VT_PINK, VT_PURPLE], yAxisID: 'yFg'  }
-            ]
-          },
-          options: {
-            responsive: true, maintainAspectRatio: false,
-            plugins: {
-              legend: { position: 'bottom', labels: { color: dark ? '#ffffff' : '#374151' } },
-              tooltip: {
-                callbacks: {
-                  label: ctx => ctx.dataset.label === 'FG %'
-                    ? `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}%`
-                    : `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(2)}`
-                }
-              }
-            },
-            scales: {
-              x: { ticks: { color: dark ? '#9CA3AF' : '#374151' }, grid: { color: dark ? '#374151' : '#E5E7EB' } },
-              yPts: {
-                position: 'left', min: 0, max: 2.0,
-                title: { display: true, text: 'Avg Points (PPP)', color: dark ? '#ffffff' : '#111827' },
-                ticks: { color: dark ? '#9CA3AF' : '#374151' },
-                grid: { color: dark ? '#374151' : '#E5E7EB' }
-              },
-              yFg: {
-                position: 'right', min: 0, max: 100,
-                title: { display: true, text: 'FG %', color: dark ? '#ffffff' : '#111827' },
-                ticks: { callback: v => `${v}%`, color: dark ? '#9CA3AF' : '#374151' },
-                grid: { drawOnChartArea: false }
-              }
-            }
-          }
-        });
-      }, [detailStats, selectedSeries, seriesAgg, header, dark]);
-
-      // SCORING BREAKDOWN (%)
-      useEffect(()=>{
-        if(!detailStats || !selectedSeries || !seriesAgg || !breakdownRef.current) return;
-        if(breakdownInst.current) breakdownInst.current.destroy();
-
-        const nPlay=header.n||1;
-        const valsPlayPct=[
-          toPct(+detailStats['+3']||0,nPlay),
-          toPct(+detailStats['+2']||0,nPlay),
-          toPct((+detailStats['-2']||0)+(+detailStats['-3']||0),nPlay),
-          toPct(+detailStats['+3F']||0,nPlay),
-          toPct(+detailStats['+2F']||0,nPlay),
-          toPct((+detailStats['-2F']||0)+(+detailStats['-3F']||0),nPlay)
-        ];
-
-        const nSer=seriesAgg.N||1;
-        const valsSerPct=[
-          toPct(seriesAgg['+3']||0,nSer),
-          toPct(seriesAgg['+2']||0,nSer),
-          toPct((seriesAgg['-2']||0)+(seriesAgg['-3']||0),nSer),
-          toPct(seriesAgg['+3F']||0,nSer),
-          toPct(seriesAgg['+2F']||0,nSer),
-          toPct((seriesAgg['-2F']||0)+(seriesAgg['-3F']||0),nSer)
-        ];
-
-        breakdownInst.current=new Chart(breakdownRef.current.getContext('2d'),{
+      metricsInst.current = new Chart(metricsRef.current.getContext('2d'), {
           type:'bar',
-          data:{labels:['3pt','2pt','No Score','3pt+Foul','2pt+Foul','Miss+Foul'],
-                datasets:[
-                  {label:selectedPlay?`${selectedSeries} ${selectedPlay.playNumber}`:`${selectedSeries}`,data:valsPlayPct,
-                  backgroundColor: VT_PURPLE
+          data:{
+              labels: ['Avg Points', 'FG%'],
+              datasets:[
+                  {
+                      label: comparisonLabels[0],
+                      data:[playPts, compPts],
+                      backgroundColor:[VT_PURPLE, VT_PURPLE],
+                      yAxisID:'yPts'
                   },
                   {
-                    label:'Series Avg',data:valsSerPct,
-                  backgroundColor: VT_PINK}
-                ]},
+                      label: comparisonLabels[1],
+                      data:[playFG, compFG],
+                      backgroundColor:[VT_PINK, VT_PINK],
+                      yAxisID:'yFg'
+                  }
+              ]
+          },
           options:{
-            responsive:true,maintainAspectRatio:false,
-            plugins:{legend:{position:'bottom',labels:{color:dark?'#fff':'#374151'}},
-                     tooltip:{callbacks:{label:(c)=>`${c.dataset.label}: ${c.formattedValue}%`}}},
-            scales:{
-              y:{beginAtZero:true,max:100,ticks:{callback:v=>`${v}%`,color:dark?'#9CA3AF':'#6B7280'},grid:{color:dark?'#374151':'#E5E7EB'}},
-              x:{ticks:{color:dark?'#9CA3AF':'#6B7280'},grid:{color:dark?'#374151':'#E5E7EB'}}
-            }
+              responsive:true,
+              maintainAspectRatio:false,
+              plugins:{
+                  legend:{ position:'bottom', labels:{ color:dark?'#fff':'#374151' } },
+                  tooltip:{
+                      callbacks:{
+                          label:(ctx)=>
+                              ctx.dataset.label === 'FG %'
+                              ? `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}%`
+                              : `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(2)}`
+                      }
+                  }
+              },
+              scales:{
+                  x:{ ticks:{ color:dark?'#9CA3AF':'#374151' }, grid:{ color:dark?'#374151':'#E5E7EB' }},
+                  yPts:{
+                      position:'left', min:0, max:2.0,
+                      title:{ display:true, text:'Avg Points (PPP)', color:dark?'#fff':'#111' },
+                      ticks:{ color:dark?'#9CA3AF':'#374151' },
+                      grid:{ color:dark?'#374151':'#E5E7EB' }
+                  },
+                  yFg:{
+                      position:'right', min:0, max:100,
+                      title:{ display:true, text:'FG %', color:dark?'#fff':'#111' },
+                      ticks:{ callback:v=>`${v}%`, color:dark?'#9CA3AF':'#374151' },
+                      grid:{ drawOnChartArea:false }
+                  }
+              }
           }
-        });
-      },[detailStats,selectedSeries,selectedPlay,dark,header,seriesAgg]);
+      });
+
+  }, [detailStats, comparisonAgg, header, dark]);
+
+
+      // SCORING BREAKDOWN (%)
+      useEffect(() => {
+      if (!detailStats || !comparisonAgg || !breakdownRef.current) return;
+      if (breakdownInst.current) breakdownInst.current.destroy();
+
+      const nPlay = header.n || 1;
+      const nComp = comparisonAgg.N || 1;
+
+      // PLAY %
+      const valsPlayPct = [
+          toPct(+detailStats['+3']||0, nPlay),
+          toPct(+detailStats['+2']||0, nPlay),
+          toPct((+detailStats['-2']||0)+(+detailStats['-3']||0), nPlay),
+          toPct(+detailStats['+3F']||0, nPlay),
+          toPct(+detailStats['+2F']||0, nPlay),
+          toPct((+detailStats['-2F']||0)+(+detailStats['-3F']||0), nPlay),
+      ];
+
+      // COMPARISON %
+      const valsCompPct = [
+          toPct(comparisonAgg['+3']||0, nComp),
+          toPct(comparisonAgg['+2']||0, nComp),
+          toPct((comparisonAgg['-2']||0)+(comparisonAgg['-3']||0), nComp),
+          toPct(comparisonAgg['+3F']||0, nComp),
+          toPct(comparisonAgg['+2F']||0, nComp),
+          toPct((comparisonAgg['-2F']||0)+(comparisonAgg['-3F']||0), nComp),
+      ];
+
+      breakdownInst.current = new Chart(breakdownRef.current.getContext('2d'), {
+          type:'bar',
+          data:{
+              labels:['3pt','2pt','No Score','3pt+Foul','2pt+Foul','Miss+Foul'],
+              datasets:[
+                  {
+                      label: comparisonLabels[0],
+                      data: valsPlayPct,
+                      backgroundColor: VT_PURPLE
+                  },
+                  {
+                      label: comparisonLabels[1],
+                      data: valsCompPct,
+                      backgroundColor: VT_PINK
+                  }
+              ]
+          },
+          options:{
+              responsive:true,
+              maintainAspectRatio:false,
+              plugins:{
+                  legend:{ position:'bottom', labels:{ color:dark?'#fff':'#374151' } },
+                  tooltip:{ callbacks:{ label:(c)=>`${c.dataset.label}: ${c.parsed.y.toFixed(1)}%` } }
+              },
+              scales:{
+                  y:{
+                      beginAtZero:true, max:100,
+                      ticks:{ callback:v=>`${v}%`, color:dark?'#9CA3AF':'#6B7280' },
+                      grid:{ color:dark?'#374151':'#E5E7EB' }
+                  },
+                  x:{
+                      ticks:{ color:dark?'#9CA3AF':'#6B7280' },
+                      grid:{ color:dark?'#374151':'#E5E7EB' }
+                  }
+              }
+          }
+      });
+
+  }, [detailStats, comparisonAgg, selectedSeries, selectedPlay, dark, header]);
+
 
       // POST-GAME SCATTER (kept)
       const seriesScatter = useMemo(() => {
