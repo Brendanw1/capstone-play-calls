@@ -572,7 +572,7 @@
                         grid:{ color:dark?'#374151':'#E5E7EB' }
                     },
                     y:{ stacked:true,
-                        ticks:{ color:dark?'#9CA3AF':'#6B7280' },
+                        ticks:{ color:dark?'#FFFFFF':'#111827' },
                         grid:{ display:false }
                     }
                 },
@@ -610,7 +610,7 @@
               responsive:true,
               maintainAspectRatio:false,
               plugins:{
-                  legend:{ position:'bottom', labels:{ color:dark?'#fff':'#374151' } },
+                  legend: false,
                   tooltip:{
                       callbacks:{
                           label:(ctx)=> `PPP: ${ctx.parsed.y.toFixed(2)}`
@@ -618,7 +618,7 @@
                   }
               },
               scales:{
-                  x:{ ticks:{ color:dark?'#9CA3AF':'#374151' }, grid:{ color:dark?'#374151':'#E5E7EB' }},
+                  x:{ ticks:{ color:dark?'#FFFFFF':'#111827' }, grid:{ color:dark?'#374151':'#E5E7EB' }},
                   y:{
                       position:'left', min:0, max:2.0,
                       title:{ display:true, text:'Avg Points (PPP)', color:dark?'#fff':'#111' },
@@ -654,7 +654,7 @@
               responsive:true,
               maintainAspectRatio:false,
               plugins:{
-                  legend:{ position:'bottom', labels:{ color:dark?'#fff':'#374151' } },
+                  legend: false,
                   tooltip:{
                       callbacks:{
                           label:(ctx)=> `FG %: ${ctx.parsed.y.toFixed(1)}%`
@@ -662,7 +662,7 @@
                   }
               },
               scales:{
-                  x:{ ticks:{ color:dark?'#9CA3AF':'#374151' }, grid:{ color:dark?'#374151':'#E5E7EB' }},
+                  x:{ ticks:{ color:dark?'#FFFFFF':'#111827' }, grid:{ color:dark?'#374151':'#E5E7EB' }},
                   y:{
                       position:'right', min:0, max:100,
                       title:{ display:true, text:'FG %', color:dark?'#fff':'#111' },
@@ -735,7 +735,7 @@
                       grid:{ color:dark?'#374151':'#E5E7EB' }
                   },
                   x:{
-                      ticks:{ color:dark?'#9CA3AF':'#6B7280' },
+                      ticks:{ color:dark?'#FFFFFF':'#111827' },
                       grid:{ color:dark?'#374151':'#E5E7EB' }
                   }
               }
@@ -1114,7 +1114,7 @@
               {(selectedSeries && detailStats && header && seriesAgg) && (
                 <div className={`rounded-lg shadow p-6 ${dark?'bg-gray-800':'bg-white'}`}>
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-bold">
+                    <h3 className="text-3xl font-bold">
                       {selectedPlay ? `${selectedSeries} ${selectedPlay.playNumber}` : `${selectedSeries}`}
                     </h3>
                   </div>
