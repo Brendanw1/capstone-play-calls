@@ -1029,7 +1029,7 @@
                         const possessionKey = `Possession${possessionCount.toString().padStart(3, '0')}`;
                         const possessionRef = database.ref(
                             `playcalls/${selectedYear}/games/${selectedGame.date}/possessions/${possessionKey}`
-                        ).push();
+                        );
                         
                         let points = 0;
                         if (outcome === '+3' || outcome === '+3F') points = 3;
