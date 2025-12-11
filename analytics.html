@@ -810,7 +810,8 @@
         const tor = n ? to / n : 0;
         const torInv = 1 - tor;
         const pppNorm = Math.min(ppp / 2, 1);
-        return { label: playNumberLabel, values: [fg, ftr, pppNorm, torInv], real: { fg, ftr, ppp, torInv } };
+        const ftrNorm = Math.min(ftr / 0.5, 1);
+        return { label: playNumberLabel, values: [fg, ftrNorm, pppNorm, torInv], real: { fg, ftr, ppp, torInv } };
       }
 
       useEffect(() => {
