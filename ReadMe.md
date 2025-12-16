@@ -35,3 +35,6 @@ playcalls/
 │   │   ├── series
 ```
 All of the previous data that was provided was put under the 2024 season. Any new data will be logged under the 2025 stats. Once data gets entered for a game, it will appear the games section in firebase. 
+
+### 
+The Manage Game Schedule file is how I maintained the schedule in firebase. It writes directly to the schedule tab, and has the ability to add games and remove them as needed. 
