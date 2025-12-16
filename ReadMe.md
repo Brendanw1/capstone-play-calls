@@ -12,3 +12,26 @@ A single-page, in-browser analytics console for VT MBB play-calls. It reads live
    # pick one
    python -m http.server 8080
    npx http-server -p 8080
+
+
+###
+ Firebase Structure
+```
+playcalls/
+├── 2024/
+├── 2025/
+│   ├── games/
+│   │   ├── 2025-11-08
+│   │   │   └── possessions
+│   ├── schedule/
+│   ├── stats/
+│   │   ├── series
+├── 2026/
+│   ├── games/
+│   │   ├── 2025-11-08
+│   │   │   └── possessions
+│   ├── schedule/
+│   ├── stats/
+│   │   ├── series
+```
+All of the previous data that was provided was put under the 2024 season. Any new data will be logged under the 2025 stats. Once data gets entered for a game, it will appear the games section in firebase. 
